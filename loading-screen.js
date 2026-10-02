@@ -40,7 +40,6 @@
         activeScreen?.remove();
         const sequence = ++screenSequence;
         const screen = document.createElement("div");
-        const captionNode = document.createElement("p");
         let captionIndex = Math.floor(Math.random() * captions.length);
         let finished = false;
         screen.className = "otter-loading-screen";
@@ -50,7 +49,6 @@
             <div class="otter-loader-card">
                 <div class="otter-loader-scene" aria-hidden="true">
                     <div class="otter-loader-model otter-3d" id="otter3d"></div>
-                    <span class="otter-loader-mascot">🦦</span>
                     <span class="otter-loader-spark">✦</span>
                 </div>
                 <p class="otter-loader-label">OTTER LAB · SYSTEM BOOT</p>
@@ -96,7 +94,6 @@
                     window.Otter3D.stop?.();
                     return;
                 }
-                screen.classList.add("has-3d-otter");
                 window.Otter3D.celebrate();
             })
             .catch(() => {});

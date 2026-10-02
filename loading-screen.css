@@ -39,16 +39,6 @@
 
 .otter-loader-model { position: absolute; inset: 0; }
 .otter-loader-model canvas { display: block; width: 100%; height: 100%; }
-.otter-loader-mascot {
-    display: block;
-    font-size: 62px;
-    line-height: 1;
-    filter: drop-shadow(0 8px 9px rgba(0, 0, 0, .3));
-    transform-origin: 50% 80%;
-}
-
-.otter-loading-screen.has-3d-otter .otter-loader-mascot { display: none; }
-
 .otter-loader-spark {
     position: absolute;
     top: 15px;
@@ -92,13 +82,11 @@
 @media (max-width: 480px) {
     .otter-loader-card { padding: 20px 20px 18px; }
     .otter-loader-scene { width: 156px; height: 150px; }
-    .otter-loader-mascot { font-size: 54px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .otter-loading-screen,
     .otter-loader-card,
-    .otter-loader-mascot,
     .otter-loader-spark,
     .otter-loader-track span { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
