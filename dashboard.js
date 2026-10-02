@@ -1466,6 +1466,12 @@ async function initialiseDashboard() {
     renderDashboardDate();
     document.getElementById("profileName").textContent = displayName;
     document.getElementById("profileAvatar").textContent = initialsFor(displayName);
+    window.OtterAccount?.mountActions(document.getElementById("profileActions"), {
+        client: supabaseClient,
+        variant: "popover",
+        signOutHref: "index.html",
+        toast: showToast
+    });
     initLabTimings();
     setActiveTab("overview");
     if (window.OtterTutorial) {

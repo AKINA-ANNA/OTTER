@@ -23,23 +23,6 @@ let profileMap = {};
 let logsRangeMode = "default";
 let teacherNotices = [];
 let teacherNoticeHistory = [];
-let teacherPostsCache = [];
-let feedFilter = "all";
-let pendingCounts = { formal: 0, informal: 0 };
-let feedSeenFloor = null;
-
-function renderFeedsBadges() {
-    document.querySelectorAll("[data-badge]").forEach(badge => {
-        const kind = badge.dataset.badge;
-        if (pendingCounts[kind] > 0) {
-            badge.textContent = pendingCounts[kind] > 9 ? "9+" : pendingCounts[kind];
-            badge.hidden = false;
-        } else {
-            badge.hidden = true;
-            badge.textContent = "";
-        }
-    });
-}
 let simClock = { simulated_at: null, label: null };
 function effectiveTeacherNow() { return simClock.simulated_at ? new Date(simClock.simulated_at) : new Date(); }
 
@@ -240,20 +223,12 @@ function setTeacherTab(tabName) {
 /* ---------------- Announcements (overview) ---------------- */
 
 function renderTeacherPosts(posts) {
-    teacherPostsCache = posts;
     const feed = document.getElementById("teacherPostList");
-    if (feedFilter === "all") { pendingCounts.formal = 0; pendingCounts.informal = 0; }
-    renderFeedsBadges();
-    const visible = posts.filter(post => feedFilter === "all" || Social.kind(post) === feedFilter);
     if (!posts.length) {
         feed.innerHTML = `<div class="empty-state"><strong>No announcements yet</strong><p>Share an update or reply to a student here.</p></div>`;
         return;
     }
-    if (!visible.length) {
-        feed.innerHTML = `<div class="empty-state"><strong>No ${feedFilter} announcements</strong><p>Posts like this will appear here when someone shares them.</p></div>`;
-        return;
-    }
-    feed.innerHTML = visible.map(post => {
+    feed.innerHTML = posts.map(post => {
         const formal = Social.kind(post) === "formal";
         const own = post.author_id === currentUser.id;
         return `
@@ -314,17 +289,6 @@ async function loadTeacherAnnouncements() {
             comments: comments.filter(comment => comment.announcement_id === announcement.id)
         };
     });
-    const newest = posts.reduce((max, post) => Math.max(max, new Date(post.created_at).getTime()), 0);
-    if (feedSeenFloor === null) {
-        feedSeenFloor = newest;
-    } else {
-        posts.forEach(post => {
-            if (post.author_id !== currentUser.id && new Date(post.created_at).getTime() > feedSeenFloor) {
-                pendingCounts[Social.kind(post)]++;
-            }
-        });
-        feedSeenFloor = Math.max(feedSeenFloor, newest);
-    }
     renderTeacherPosts(posts);
 }
 
@@ -1520,7 +1484,7 @@ document.addEventListener("keydown", event => {
 });
 document.getElementById("teacherSignOut").addEventListener("click", async () => {
     await supabaseClient.auth.signOut();
-    window.location.href = "index.html";
+    window.location.href = "teacher-login.html";
 });
 document.addEventListener("pointerdown", primeAudio, { capture: true });
 document.getElementById("teacherAlertButton").addEventListener("click", requestAlerts);
@@ -1528,15 +1492,6 @@ syncAlertButton();
 
 document.getElementById("teacherAnnouncementForm").addEventListener("submit", createTeacherAnnouncement);
 Social.initComposer(document.getElementById("teacherAnnouncementForm"), { onNotice: showToast });
-document.getElementById("teacherFeedFilters").addEventListener("click", event => {
-    const filter = event.target.closest("[data-feed-filter]");
-    if (!filter) return;
-    const kind = filter.dataset.feedFilter;
-    feedFilter = (feedFilter === kind) ? "all" : kind;
-    document.querySelectorAll("#teacherFeedFilters .feed-filter").forEach(button => button.classList.toggle("active", feedFilter === button.dataset.feedFilter));
-    pendingCounts[kind] = 0;
-    renderTeacherPosts(teacherPostsCache);
-});
 document.getElementById("teacherPostList").addEventListener("click", async event => {
     const commentAction = event.target.closest("[data-comment-action]");
     if (commentAction) {
@@ -1978,6 +1933,17 @@ async function initialiseTeacher() {
     const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Teacher";
     currentUser.name = displayName;
     document.getElementById("teacherIdentity").textContent = displayName;
+    window.OtterAccount?.mount({
+        client: supabaseClient,
+        triggerId: "teacherIdentity",
+        popoverId: "teacherAccountPopover",
+        variant: "sidebar",
+        label: "Teacher",
+        name: displayName,
+        email: user.email,
+        signOutHref: "teacher-login.html",
+        toast: showToast
+    });
     initLabTimings();
     setTeacherTab("overview");
     if (window.OtterTutorial) {

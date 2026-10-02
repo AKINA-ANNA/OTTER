@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Otter — Teacher console</title>
-    <link rel="stylesheet" href="teacher.css?v=35">
+    <link rel="stylesheet" href="teacher.css?v=36">
     <link rel="stylesheet" href="loading-screen.css?v=3">
     <link rel="stylesheet" href="tutorial.css?v=2">
+    <link rel="stylesheet" href="account-deletion.css?v=1">
 </head>
 <body>
     <div class="teacher-shell">
@@ -22,7 +23,7 @@
                 <button data-tab="labTimings" type="button"><span class="nav-icon" aria-hidden="true">▦</span>Lab timings</button>
             </nav>
             <div class="teacher-sidebar-footer">
-                <span id="teacherIdentity">Teacher</span>
+                <button class="sidebar-identity" id="teacherIdentity" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="teacherAccountPopover">Teacher</button>
                 <button class="sidebar-signout" id="teacherSignOut" type="button">↪ Sign out</button>
             </div>
         </aside>
@@ -74,10 +75,6 @@
                             </div>
                         </form>
                     </section>
-                    <div class="feed-filters" id="teacherFeedFilters">
-                        <button class="feed-filter" type="button" data-feed-filter="formal">Formal<span class="feed-badge" data-badge="formal" hidden></span></button>
-                        <button class="feed-filter" type="button" data-feed-filter="informal">Informal<span class="feed-badge" data-badge="informal" hidden></span></button>
-                    </div>
                     <div class="post-list" id="teacherPostList"></div>
                 </div>
             </section>
@@ -420,6 +417,7 @@
     <script src="lab-timings.js?v=2"></script>
     <script src="tutorial-content.js?v=1"></script>
     <script src="tutorial.js?v=3"></script>
-    <script src="teacher.js?v=34"></script>
+    <script src="account-deletion.js?v=5"></script>
+    <script src="teacher.js?v=36"></script>
 </body>
 </html>

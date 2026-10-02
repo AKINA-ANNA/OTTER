@@ -33,6 +33,20 @@ async function verifyAdmin() {
     return true;
 }
 
+/* The invite code is captured at sign-up into user metadata. With email
+   confirmation on, signUp() returns no session so claim_admin_invite() cannot
+   run until the address is verified; the stored code is what lets activation
+   finish at first sign-in instead of leaving the admin locked out. */
+const storedInviteCode = user => String(user?.user_metadata?.admin_invite_code || "").trim();
+
+async function claimInvite(inviteCode) {
+    if (!inviteCode) return false;
+    const { data, error } = await supabaseClient.rpc("claim_admin_invite", { invite_code: inviteCode });
+    if (error || !data) return false;
+    const { data: isAdmin } = await supabaseClient.rpc("is_admin");
+    return Boolean(isAdmin);
+}
+
 const loginForm = document.getElementById("adminLoginForm");
 if (loginForm) {
     loginForm.addEventListener("submit", async event => {
@@ -45,17 +59,30 @@ if (loginForm) {
                 password: document.getElementById("adminPassword").value
             });
             if (error) {
-                message("That admin email or password is not valid.");
+                if (/not confirmed/i.test(error.message)) {
+                    message("Confirm that email first, then sign in. Check your inbox for the confirmation link.");
+                } else {
+                    message("That admin email or password is not valid.");
+                }
                 window.OtterLoading?.hide();
                 return;
             }
-            await verifyAdmin();
             const { data: isAdmin, error: roleError } = await supabaseClient.rpc("is_admin");
             if (roleError || !isAdmin) {
-                await supabaseClient.auth.signOut();
-                message("This account does not have admin access.");
-                window.OtterLoading?.hide();
-                return;
+                /* Not an admin yet. If sign-up happened while email confirmation
+                   was on, the invite was never claimed - finish it now that the
+                   address is verified and a session exists. The invite field only
+                   exists on the sign-up page, so the code comes from metadata. */
+                const { data: userData } = await supabaseClient.auth.getUser();
+                const activated = roleError ? false : await claimInvite(storedInviteCode(userData?.user));
+                if (!activated) {
+                    await supabaseClient.auth.signOut();
+                    message(roleError
+                        ? "Could not check admin access right now. Try again."
+                        : "This account does not have admin access.");
+                    window.OtterLoading?.hide();
+                    return;
+                }
             }
             window.location.href = "admin.html";
         } catch (error) {
@@ -155,7 +182,14 @@ if (signupForm) {
                 email: document.getElementById("adminEmail").value.trim(),
                 password
             });
-            if (loginError) { message("That password does not match the student account."); return; }
+            if (loginError) {
+                if (/not confirmed/i.test(loginError.message)) {
+                    message("That account exists but its email is not confirmed yet. Confirm it, then sign in on Admin login.");
+                } else {
+                    message("That password does not match the student account.");
+                }
+                return;
+            }
             const claimed = await verifyAdmin();
             if (!claimed) { message("The invite code was not accepted."); return; }
             window.location.href = "admin.html";
@@ -178,6 +212,6 @@ if (signupForm) {
             window.location.href = "admin.html";
             return;
         }
-        message("Check the admin email, confirm it, then use Admin login.");
+        message("Almost there — open the confirmation link we just emailed you, then sign in on Admin login. Your invite code is applied automatically at that first sign-in.");
     });
 }

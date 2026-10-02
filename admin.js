@@ -76,6 +76,17 @@ async function requireAdmin() {
     const { data: isAdmin, error } = await supabaseClient.rpc("is_admin");
     if (error || !isAdmin) { await supabaseClient.auth.signOut(); window.location.href = "admin-login.html"; return null; }
     document.getElementById("adminIdentity").textContent = user.email || "Admin";
+    window.OtterAccount?.mount({
+        client: supabaseClient,
+        triggerId: "adminIdentity",
+        popoverId: "adminAccountPopover",
+        variant: "sidebar",
+        label: "Admin",
+        name: user.user_metadata?.full_name || user.email || "Admin",
+        email: user.email,
+        signOutHref: "admin-login.html",
+        toast
+    });
     document.getElementById("adminDate").textContent = new Date().toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
     return user;
 }

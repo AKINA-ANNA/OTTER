@@ -205,12 +205,6 @@ a { color: inherit; text-decoration: none; }
 .gif-option { border: 0; background: transparent; padding: 0; border-radius: 8px; overflow: hidden; cursor: pointer; }
 .gif-option img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .gif-empty { grid-column: 1 / -1; margin: 0; padding: 14px 4px; color: var(--muted); font-size: 10px; text-align: center; }
-.feed-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.feed-filter { position: relative; padding: 6px 13px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; cursor: pointer; }
-.feed-filter:hover:not(.active) { color: var(--ink); }
-.feed-filter.active { background: var(--lime); border-color: var(--lime); color: #16200e; }
-.feed-badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: var(--red); color: #fff; font: 700 9px/16px "DM Mono", monospace; text-align: center; box-shadow: 0 0 0 2px var(--panel-soft); }
-.feed-badge[hidden] { display: none; }
 .post-media { display: block; margin: 12px 0 2px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .post-media-image { width: 100%; display: block; max-height: 420px; object-fit: cover; }
 .post-media-video { width: 100%; display: block; max-height: 420px; background: #000; }
@@ -573,8 +567,6 @@ body {
 .tool-button:hover, .tool-button.active { border-color: var(--line); background: #f3f0e3; color: var(--ink); }
 .post-button, .new-project-button, .review-button.approve, .auth-submit { background: var(--lime); color: #28291f; }
 .post-button:hover, .new-project-button:hover, .review-button.approve:hover, .auth-submit:hover { background: #e7c13d; }
-.feed-filter { border-radius: 6px; background: transparent; }
-.feed-filter.active { background: #292a28; border-color: #292a28; color: #fffdf5; }
 .teacher-post-card { padding: 16px 18px; }
 .teacher-post-card > p { font-size: 15px; }
 .post-flag.teacher, .you-tag { background: rgba(242, 206, 78, .25); color: #63531b; }
@@ -749,7 +741,6 @@ body {
 .post-action { font-size: 12px; }
 .student-option small { font-size: 12px; }
 .panel-header small { font-size: 12px; }
-.feed-filter { font-size: 12px; }
 .proposal-detail-inline { font-size: 13px; }
 
 /* ---- Request / notice / project history boxes ---- */
@@ -1078,12 +1069,6 @@ body {
 
 /* --- Identity block in the navbar --- */
 .teacher-sidebar-footer { gap: 10px; }
-.teacher-sidebar-footer #teacherIdentity {
-    max-width: 170px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
 .sidebar-signout {
     display: inline-flex;
     align-items: center;
@@ -1098,6 +1083,23 @@ body {
 }
 .sidebar-signout:hover { background: #fff; border-color: var(--red, #b4453a); color: var(--red, #b4453a); }
 
+/* The identity doubles as the account trigger: clicking it opens the shared
+   panel with Sign out and Delete account. */
+.sidebar-identity {
+    max-width: 170px;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.sidebar-identity:hover { color: var(--red, #b4453a); }
+
 @media (prefers-reduced-motion: reduce) {
     .teacher-nav button,
     .sidebar-signout { transition: none; }
@@ -1109,7 +1111,7 @@ body {
    drop only the name. */
 @media (max-width: 650px) {
     .teacher-sidebar .teacher-sidebar-footer { display: flex; }
-    .teacher-sidebar-footer #teacherIdentity { display: none; }
+    .teacher-sidebar-footer .sidebar-identity { display: none; }
     .sidebar-signout { padding: 6px 10px; font-size: 11px; }
 }
 

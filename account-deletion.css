@@ -1,0 +1,341 @@
+/* ============================================================
+   ACCOUNT DELETION
+   Self-contained so the dialog and the account actions read the
+   same on the light teacher and admin consoles and on the dark
+   student console. Every colour is declared here; nothing is
+   inherited from the host stylesheet.
+   ============================================================ */
+
+.ota-backdrop {
+    --ota-ink: #1d241f;
+    --ota-muted: #6c736a;
+    --ota-panel: #fdfdfa;
+    --ota-panel-2: #f2f2ec;
+    --ota-line: rgba(29, 36, 31, .16);
+    --ota-accent: #2f6f57;
+    --ota-danger: #b34335;
+    --ota-danger-surface: #fdf1ee;
+    --ota-shadow: 0 26px 60px rgba(30, 42, 32, .22);
+
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(8, 12, 10, .34);
+    animation: otaFade .2s ease;
+}
+
+html[data-theme="dark"] .ota-backdrop {
+    --ota-ink: #f4f5ef;
+    --ota-muted: #9aa39a;
+    --ota-panel: #161a17;
+    --ota-panel-2: #1e2420;
+    --ota-line: rgba(244, 245, 239, .14);
+    --ota-accent: #c8f36d;
+    --ota-danger: #f08a7a;
+    --ota-danger-surface: #2a1a17;
+    --ota-shadow: 0 26px 60px rgba(0, 0, 0, .5);
+
+    background: rgba(3, 5, 4, .58);
+}
+
+.ota-backdrop[hidden] { display: none; }
+
+@keyframes otaFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes otaRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ------------------------------------------------------------
+   DIALOG
+   ------------------------------------------------------------ */
+
+.ota-panel {
+    width: min(460px, 100%);
+    max-height: min(88vh, 720px);
+    overflow-y: auto;
+    background: var(--ota-panel);
+    color: var(--ota-ink);
+    border: 1px solid var(--ota-line);
+    border-radius: 14px;
+    box-shadow: var(--ota-shadow);
+    animation: otaRise .22s ease;
+}
+
+.ota-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid var(--ota-line);
+}
+
+.ota-eyebrow {
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ota-danger);
+}
+
+.ota-head h2 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+}
+
+.ota-close {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: var(--ota-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.ota-close:hover { background: var(--ota-panel-2); color: var(--ota-ink); }
+
+.ota-body { padding: 18px 20px 4px; }
+.ota-step { display: grid; gap: 14px; }
+.ota-step[hidden] { display: none; }
+
+.ota-lead {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--ota-muted);
+}
+
+.ota-lead strong { color: var(--ota-ink); }
+
+.ota-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+}
+
+.ota-list li {
+    position: relative;
+    padding-left: 20px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ota-muted);
+}
+
+.ota-list li::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ota-danger);
+}
+
+/* ------------------------------------------------------------
+   FIELDS
+   ------------------------------------------------------------ */
+
+.ota-field { display: grid; gap: 6px; }
+
+.ota-field > span {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ota-muted);
+}
+
+.ota-field > span b { color: var(--ota-ink); letter-spacing: .06em; }
+
+.ota-field input {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--ota-ink);
+    background: var(--ota-panel-2);
+    border: 1px solid var(--ota-line);
+    border-radius: 9px;
+    outline: none;
+}
+
+.ota-field input:focus { border-color: var(--ota-accent); }
+
+.ota-code-field input {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: .42em;
+    padding-left: .42em;
+}
+
+.ota-code-field input::placeholder { color: var(--ota-muted); opacity: .45; }
+
+.ota-error {
+    margin: 0;
+    padding: 9px 11px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--ota-danger);
+    background: var(--ota-danger-surface);
+    border-radius: 8px;
+}
+
+.ota-error[hidden] { display: none; }
+
+.ota-resend {
+    justify-self: start;
+    /* Reads as a link but keeps a real hit target - an 18px row is hard to
+       hit on a phone, and this is the way back after a bad code. */
+    min-height: 30px;
+    padding: 6px 0;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ota-muted);
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--ota-line);
+    cursor: pointer;
+}
+
+.ota-resend:disabled { opacity: .55; cursor: default; }
+.ota-resend:not(:disabled):hover { color: var(--ota-ink); }
+
+/* ------------------------------------------------------------
+   FOOTER
+   ------------------------------------------------------------ */
+
+.ota-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 16px 20px 20px;
+}
+
+.ota-hint {
+    flex: 1 1 190px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--ota-muted);
+}
+
+.ota-button {
+    flex: none;
+    padding: 10px 18px;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #ffffff;
+    background: var(--ota-danger);
+    border: 1px solid transparent;
+    border-radius: 9px;
+    cursor: pointer;
+}
+
+.ota-button:disabled { opacity: .45; cursor: default; }
+.ota-button:not(:disabled):hover { filter: brightness(1.08); }
+
+/* ------------------------------------------------------------
+   ACCOUNT ACTIONS — the Sign out / Delete account pair
+   ------------------------------------------------------------ */
+
+.ota-actions { display: grid; gap: 2px; }
+
+.ota-actions[data-ota-variant="popover"] { width: 100%; }
+.ota-actions[data-ota-variant="sidebar"] { width: 100%; margin-top: 6px; }
+
+.ota-action {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 9px 10px;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: left;
+    color: inherit;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.ota-actions[data-ota-variant="sidebar"] .ota-action { font-size: 12.5px; padding: 7px 8px; }
+
+.ota-action:hover { background: rgba(127, 127, 127, .12); }
+.ota-action:disabled { opacity: .55; cursor: default; }
+.ota-action svg { flex: none; opacity: .75; }
+
+.ota-action-danger { color: #b34335; }
+.ota-action-danger:hover { background: rgba(179, 67, 53, .1); }
+.ota-action-danger svg { opacity: 1; }
+
+html[data-theme="dark"] .ota-action-danger { color: #f08a7a; }
+
+/* ------------------------------------------------------------
+   POPOVER — used where the console has no profile card of its
+   own (teacher and admin sidebars).
+   ------------------------------------------------------------ */
+
+.ota-popover {
+    position: fixed;
+    z-index: 9400;
+    min-width: 244px;
+    padding: 14px;
+    background: #fdfdfa;
+    color: #1d241f;
+    border: 1px solid rgba(29, 36, 31, .16);
+    border-radius: 12px;
+    box-shadow: 0 18px 44px rgba(30, 42, 32, .22);
+}
+
+.ota-popover[hidden] { display: none; }
+
+.ota-popover-label {
+    margin: 0 0 3px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #6c736a;
+}
+
+.ota-popover-name {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.ota-popover-email {
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    color: #6c736a;
+    overflow-wrap: anywhere;
+}
+
+.ota-popover-divider {
+    height: 1px;
+    margin: 12px 0 8px;
+    background: rgba(29, 36, 31, .12);
+}
+
+@media (max-width: 480px) {
+    .ota-foot { flex-direction: column; align-items: stretch; }
+    .ota-button { width: 100%; }
+}

@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Otter — Admin console</title>
-    <link rel="stylesheet" href="admin.css?v=26">
+    <link rel="stylesheet" href="admin.css?v=27">
     <link rel="stylesheet" href="loading-screen.css?v=3">
     <link rel="stylesheet" href="tutorial.css?v=2">
+    <link rel="stylesheet" href="account-deletion.css?v=1">
 </head>
 <body>
     <div class="admin-shell">
@@ -19,7 +20,7 @@
                 <button data-admin-tab="clock" type="button">Test clock</button>
             </nav>
             <div class="admin-sidebar-footer">
-                <span id="adminIdentity">Admin</span>
+                <button class="admin-identity" id="adminIdentity" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="adminAccountPopover">Admin</button>
                 <button id="adminSignOut" type="button">↪ Sign out</button>
             </div>
         </aside>
@@ -160,6 +161,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="tutorial-content.js?v=1"></script>
     <script src="tutorial.js?v=3"></script>
-    <script src="admin.js?v=29"></script>
+    <script src="account-deletion.js?v=5"></script>
+    <script src="admin.js?v=30"></script>
 </body>
 </html>

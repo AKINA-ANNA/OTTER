@@ -503,6 +503,8 @@ small { font-size: var(--fs-xs); }
 .profile-details > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px; align-items: start; }
 .profile-details dt { color: var(--ink-3); font-size: var(--fs-xs); }
 .profile-details dd { min-width: 0; margin: 0; color: var(--ink); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.profile-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.profile-actions:empty { display: none; }
 
 .profile-chip > span:first-child {
     max-width: 150px;

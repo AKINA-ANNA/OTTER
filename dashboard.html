@@ -14,9 +14,10 @@
     document.documentElement.dataset.theme = saved === "dark" ? "dark" : "light";
 })();
 </script>
-<link rel="stylesheet" href="dashboard.css?v=48">
+<link rel="stylesheet" href="dashboard.css?v=49">
 <link rel="stylesheet" href="loading-screen.css?v=3">
 <link rel="stylesheet" href="tutorial.css?v=2">
+<link rel="stylesheet" href="account-deletion.css?v=1">
 </head>
 <body>
 
@@ -80,6 +81,7 @@
                         <div><dt>Email status</dt><dd id="profileDetailEmailStatus">Loading</dd></div>
                         <div><dt>Account created</dt><dd id="profileDetailCreated">Loading</dd></div>
                     </dl>
+                    <div class="profile-actions" id="profileActions"></div>
                 </section>
             </div>
             <button class="sign-out" id="signOutButton" type="button" aria-label="Sign out">
@@ -434,6 +436,7 @@
 <script src="tutorial-content.js?v=1"></script>
 <script src="tutorial.js?v=3"></script>
 <script src="elastic-grid.js?v=4"></script>
-<script src="dashboard.js?v=44"></script>
+<script src="account-deletion.js?v=5"></script>
+<script src="dashboard.js?v=45"></script>
 </body>
 </html>
