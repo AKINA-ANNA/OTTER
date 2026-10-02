@@ -1,0 +1,237 @@
+/* ============================================================
+   OTTER TOURS
+   Self-contained so the same overlay reads correctly on the dark
+   student and admin consoles and the light teacher console. The
+   host page sets data-theme on the root, ring and card.
+   ============================================================ */
+
+.ot-scrim,
+.ot-ring,
+.ot-card {
+    --ot-ink: #f4f5ef;
+    --ot-muted: #9aa39a;
+    --ot-panel: #161a17;
+    --ot-panel-2: #1e2420;
+    --ot-line: rgba(244, 245, 239, .14);
+    --ot-accent: #c8f36d;
+    --ot-accent-ink: #16200e;
+    --ot-shadow: 0 26px 60px rgba(0, 0, 0, .5);
+}
+
+.ot-scrim[data-theme="light"],
+.ot-ring[data-theme="light"],
+.ot-card[data-theme="light"] {
+    --ot-ink: #1d241f;
+    --ot-muted: #6c736a;
+    --ot-panel: #fdfdfa;
+    --ot-panel-2: #f2f2ec;
+    --ot-line: rgba(29, 36, 31, .16);
+    --ot-accent: #2f6f57;
+    --ot-accent-ink: #ffffff;
+    --ot-shadow: 0 26px 60px rgba(30, 42, 32, .22);
+}
+
+.ot-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: rgba(8, 12, 10, .34);
+    animation: otFade .22s ease;
+}
+
+.ot-scrim[data-theme="light"] { background: rgba(40, 48, 40, .3); }
+
+@keyframes otFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------------- spotlight ---------------- */
+
+/* The oversized spread shadow cuts the hole; the element itself is
+   transparent, so whatever sits under it stays visible and lit. */
+.ot-ring {
+    position: fixed;
+    z-index: 9001;
+    pointer-events: none;
+    border: 2px solid var(--ot-accent);
+    box-shadow: 0 0 0 9999px rgba(6, 10, 8, .66);
+    transition: top .2s var(--ot-ease, ease), left .2s var(--ot-ease, ease),
+                width .2s var(--ot-ease, ease), height .2s var(--ot-ease, ease);
+}
+
+.ot-ring[hidden] { display: none; }
+
+.ot-ring[data-theme="light"] { box-shadow: 0 0 0 9999px rgba(45, 54, 45, .58); }
+
+/* ---------------- card ---------------- */
+
+.ot-card {
+    position: fixed;
+    z-index: 9002;
+    width: min(384px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 20px 22px 18px;
+    border: 1px solid var(--ot-line);
+    border-radius: 18px;
+    background: var(--ot-panel);
+    color: var(--ot-ink);
+    box-shadow: var(--ot-shadow);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    animation: otPop .24s cubic-bezier(.2, .9, .3, 1);
+}
+
+@keyframes otPop {
+    from { opacity: 0; transform: translateY(10px) scale(.97); }
+    to { opacity: 1; transform: none; }
+}
+
+.ot-card h2 {
+    margin: 12px 0 0;
+    font-size: 18px;
+    line-height: 1.3;
+    letter-spacing: -.4px;
+}
+
+.ot-card p { margin: 8px 0 0; }
+
+.ot-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ot-act { display: grid; min-width: 0; }
+.ot-act strong {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+.ot-act em {
+    font-style: normal;
+    font-size: 11px;
+    color: var(--ot-accent);
+}
+
+.ot-close {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    margin: -4px -6px 0 0;
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    color: var(--ot-muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+.ot-close:hover { background: var(--ot-panel-2); color: var(--ot-ink); }
+
+.ot-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.ot-count {
+    margin-left: auto;
+    color: var(--ot-muted);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.ot-dots { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.ot-dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--ot-line);
+    cursor: pointer;
+    transition: background .16s ease, transform .16s ease;
+}
+.ot-dot.is-done { background: var(--ot-muted); }
+.ot-dot.is-current { background: var(--ot-accent); transform: scale(1.35); }
+.ot-dot:hover { transform: scale(1.35); }
+
+.ot-track {
+    flex: 1;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--ot-line);
+    overflow: hidden;
+}
+.ot-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ot-accent);
+    transition: width .24s ease;
+}
+
+.ot-body { color: var(--ot-muted); }
+
+.ot-tip {
+    display: flex;
+    gap: 9px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--ot-line);
+    border-left: 3px solid var(--ot-accent);
+    border-radius: 11px;
+    background: var(--ot-panel-2);
+    font-size: 12px;
+    line-height: 1.55;
+}
+.ot-tip span { flex: 0 0 auto; color: var(--ot-accent); }
+
+.ot-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.ot-back,
+.ot-next {
+    padding: 9px 16px;
+    border: 1px solid var(--ot-line);
+    border-radius: 10px;
+    background: none;
+    color: var(--ot-ink);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .16s ease, border-color .16s ease;
+}
+.ot-back:hover:not(:disabled) { background: var(--ot-panel-2); }
+.ot-back:disabled { opacity: .35; cursor: not-allowed; }
+
+.ot-next {
+    margin-left: auto;
+    border-color: transparent;
+    background: var(--ot-accent);
+    color: var(--ot-accent-ink);
+    font-weight: 600;
+}
+.ot-next:hover { filter: brightness(1.08); }
+
+/* ---------------- reduced motion ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    .ot-scrim,
+    .ot-card { animation: none; }
+    .ot-ring,
+    .ot-track span,
+    .ot-dot { transition: none; }
+}

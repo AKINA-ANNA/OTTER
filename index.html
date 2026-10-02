@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otter — Lab Equipment Portal</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css?v=5">
+</head>
+
+<body>
+
+    <!-- Decorative background -->
+    <div class="background">
+        <div class="blob blob-one"></div>
+        <div class="blob blob-two"></div>
+        <div class="blob blob-three"></div>
+
+        <div class="bubble bubble-1"></div>
+        <div class="bubble bubble-2"></div>
+        <div class="bubble bubble-3"></div>
+        <div class="bubble bubble-4"></div>
+    </div>
+
+    <!-- Top notification -->
+    <div id="toast" class="toast">
+        <div class="toast-icon" id="toastIcon">✓</div>
+
+        <div>
+            <strong id="toastTitle">Success</strong>
+            <p id="toastMessage">Something happened.</p>
+        </div>
+
+        <button id="toastClose" class="toast-close">×</button>
+    </div>
+
+
+    <main class="auth-stage">
+
+        <!-- =========================
+             OTTER CHARACTER
+        ========================== -->
+
+        <div class="otter-area" id="otterArea">
+
+            <div class="otter-speech" id="otterSpeech">
+                <span>psst...</span>
+            </div>
+
+            <div class="otter-3d" id="otter3d"></div>
+
+            <!-- little floating bubbles -->
+            <div class="otter-bubble bubble-a">○</div>
+            <div class="otter-bubble bubble-b">○</div>
+
+        </div>
+
+
+        <!-- =========================
+             AUTH CARD
+        ========================== -->
+
+        <section class="auth-card" id="authCard">
+
+            <div class="card-decoration decoration-one"></div>
+            <div class="card-decoration decoration-two"></div>
+
+            <div class="brand">
+                <div class="brand-mark">
+                    <span>O</span>
+                </div>
+
+                <div>
+                    <h1>otter</h1>
+                    <p>student desk</p>
+                </div>
+            </div>
+
+
+            <!-- =========================
+                 LOGIN
+            ========================== -->
+
+            <div class="auth-view active" id="loginView">
+
+                <div class="heading">
+                    <h2>Welcome back!</h2>
+                    <p>Ready to get your paws on some equipment?</p>
+                </div>
+
+                <form id="loginForm" novalidate>
+
+                    <div class="field">
+                        <label for="loginEmail">Email</label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">✉</span>
+                            <input
+                                type="email"
+                                id="loginEmail"
+                                name="email"
+                                placeholder="you@school.com"
+                                autocomplete="email"
+                                required
+                            >
+                        </div>
+
+                        <small class="field-error" id="loginEmailError"></small>
+                    </div>
+
+
+                    <div class="field">
+                        <label for="loginPassword">Password</label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">●</span>
+
+                            <input
+                                type="password"
+                                id="loginPassword"
+                                name="password"
+                                placeholder="Your password"
+                                autocomplete="current-password"
+                                required
+                            >
+
+                            <button
+                                type="button"
+                                class="password-toggle"
+                                data-target="loginPassword"
+                            >
+                                show
+                            </button>
+                        </div>
+
+                        <small class="field-error" id="loginPasswordError"></small>
+                    </div>
+
+
+                    <div class="form-row">
+                        <label class="remember">
+                            <input type="checkbox" id="rememberMe">
+                            <span></span>
+                            Remember me
+                        </label>
+
+                        <button
+                            type="button"
+                            class="forgot-button"
+                            id="forgotPassword"
+                        >
+                            Forgot password?
+                        </button>
+                    </div>
+
+
+                    <button class="primary-button" id="loginButton" type="submit">
+                        <span class="button-text">Log me in</span>
+                        <span class="button-paw">→</span>
+                    </button>
+
+                </form>
+
+
+                <div class="switch-auth">
+                    <span>New around here?</span>
+
+                    <button type="button" id="showSignup">
+                        Create an account
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- =========================
+                 SIGNUP
+            ========================== -->
+
+            <div class="auth-view" id="signupView">
+
+                <div class="heading">
+                    <h2>Join the den!</h2>
+                    <p>Make an account before grabbing any lab gear.</p>
+                </div>
+
+                <form id="signupForm" novalidate>
+
+                    <div class="field">
+                        <label for="signupName">Full name</label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">☺</span>
+
+                            <input
+                                type="text"
+                                id="signupName"
+                                name="name"
+                                placeholder="Your full name"
+                                autocomplete="name"
+                                maxlength="80"
+                                required
+                            >
+                        </div>
+
+                        <small class="field-error" id="signupNameError"></small>
+                    </div>
+
+
+                    <div class="field">
+                        <label for="signupEmail">School email</label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">✉</span>
+
+                            <input
+                                type="email"
+                                id="signupEmail"
+                                name="email"
+                                placeholder="you@school.com"
+                                autocomplete="email"
+                                required
+                            >
+                        </div>
+
+                        <small class="field-hint">
+                            We'll send a confirmation link here.
+                        </small>
+
+                        <small class="field-error" id="signupEmailError"></small>
+                    </div>
+
+
+                    <div class="field">
+                        <label for="signupPhone">Phone number</label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">☎</span>
+
+                            <input
+                                type="tel"
+                                id="signupPhone"
+                                name="phone"
+                                placeholder="+91 98765 43210"
+                                autocomplete="tel"
+                                maxlength="20"
+                                required
+                            >
+                        </div>
+
+                        <small class="field-error" id="signupPhoneError"></small>
+                    </div>
+
+
+                    <div class="field">
+                        <label for="signupPassword">Password</label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">●</span>
+
+                            <input
+                                type="password"
+                                id="signupPassword"
+                                name="password"
+                                placeholder="At least 8 characters"
+                                autocomplete="new-password"
+                                required
+                            >
+
+                            <button
+                                type="button"
+                                class="password-toggle"
+                                data-target="signupPassword"
+                            >
+                                show
+                            </button>
+                        </div>
+
+                        <div class="password-strength">
+                            <div class="strength-track">
+                                <div id="strengthBar"></div>
+                            </div>
+
+                            <span id="strengthText">Make it otterly secure.</span>
+                        </div>
+
+                        <small class="field-error" id="signupPasswordError"></small>
+                    </div>
+
+
+                    <div class="field">
+                        <label for="signupConfirmPassword">
+                            Confirm password
+                        </label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">✓</span>
+
+                            <input
+                                type="password"
+                                id="signupConfirmPassword"
+                                name="confirmPassword"
+                                placeholder="Type it again"
+                                autocomplete="new-password"
+                                required
+                            >
+                        </div>
+
+                        <small class="field-error" id="signupConfirmPasswordError"></small>
+                    </div>
+
+
+                    <label class="terms">
+                        <input type="checkbox" id="terms" required>
+                        <span class="check"></span>
+
+                        <span>
+                            I agree to use the lab equipment responsibly.
+                        </span>
+                    </label>
+
+                    <small class="field-error" id="termsError"></small>
+
+
+                    <button class="primary-button" id="signupButton" type="submit">
+                        <span class="button-text">Create my account</span>
+                        <span class="button-paw">→</span>
+                    </button>
+
+                </form>
+
+
+                <div class="switch-auth">
+                    <span>Already have an account?</span>
+
+                    <button type="button" id="showLogin">
+                        Log in
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- =========================
+                 EMAIL CONFIRMATION
+            ========================== -->
+
+            <div class="confirmation-view" id="confirmationView">
+
+                <div class="mail-animation">
+
+                    <div class="mail-back"></div>
+
+                    <div class="mail">
+                        <div class="mail-paper">
+                            <span>OTTER</span>
+                            <strong>✉</strong>
+                        </div>
+
+                        <div class="mail-flap"></div>
+                    </div>
+
+                    <div class="mail-spark spark-one">✦</div>
+                    <div class="mail-spark spark-two">✦</div>
+                    <div class="mail-spark spark-three">•</div>
+
+                </div>
+
+                <h2>Check your inbox!</h2>
+
+                <p>
+                    We've sent a confirmation email to
+                    <strong id="confirmationEmail"></strong>.
+                </p>
+
+                <p class="confirmation-small">
+                    Open it and click the confirmation button.
+                    Once your email is confirmed, you can log in.
+                </p>
+
+                <button
+                    class="secondary-button"
+                    id="backToLogin"
+                    type="button"
+                >
+                    Back to login
+                </button>
+
+                <button
+                    class="text-button"
+                    id="resendConfirmation"
+                    type="button"
+                >
+                    Resend confirmation email
+                </button>
+
+            </div>
+
+
+            <!-- =========================
+                 PROFILE ONBOARDING
+            ========================== -->
+
+            <div class="onboarding-view" id="onboardingView">
+
+                <div class="onboarding-kicker">
+                    <span class="kicker-dot"></span>
+                    One last thing
+                </div>
+
+                <div class="heading">
+                    <h2>Find your place in the den.</h2>
+                    <p>Tell us a little about your class so your equipment requests reach the right place.</p>
+                </div>
+
+                <div class="profile-progress" aria-hidden="true">
+                    <span class="profile-progress-fill"></span>
+                </div>
+
+                <form id="profileForm" novalidate>
+
+                    <div class="field">
+                        <label for="studentId">Admission number</label>
+
+                        <div class="input-wrap">
+                            <span class="input-icon">#</span>
+                            <input
+                                type="text"
+                                id="studentId"
+                                name="student_id"
+                                placeholder="e.g. ATL-2026-014"
+                                autocomplete="off"
+                                maxlength="40"
+                                required
+                            >
+                        </div>
+
+                        <small class="field-hint">Use the admission number issued by your school.</small>
+                        <small class="field-error" id="studentIdError"></small>
+                    </div>
+
+                    <div class="profile-grid">
+                        <div class="field">
+                            <label for="className">Class</label>
+
+                            <div class="input-wrap">
+                                <span class="input-icon">✦</span>
+                                <input
+                                    type="text"
+                                    id="className"
+                                    name="class_name"
+                                    placeholder="e.g. 10"
+                                    maxlength="30"
+                                    required
+                                >
+                            </div>
+
+                            <small class="field-error" id="classNameError"></small>
+                        </div>
+
+                        <div class="field">
+                            <label for="section">Section</label>
+
+                            <div class="input-wrap">
+                                <span class="input-icon">◌</span>
+                                <input
+                                    type="text"
+                                    id="section"
+                                    name="section"
+                                    placeholder="e.g. A"
+                                    maxlength="20"
+                                    required
+                                >
+                            </div>
+
+                            <small class="field-error" id="sectionError"></small>
+                        </div>
+                    </div>
+
+                    <button class="primary-button" id="profileButton" type="submit">
+                        <span class="button-text">Save my details</span>
+                        <span class="button-paw">→</span>
+                    </button>
+
+                </form>
+
+                <p class="onboarding-note">You can update these details later from your profile.</p>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <footer>
+        <span>otter</span>
+        <span>•</span>
+        <span>ATL Lab Equipment Management</span>
+        <span>•</span>
+        <a href="admin-login.html">Admin</a>
+    </footer>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="three.min.js"></script>
+    <script src="otter3d.js"></script>
+    <script src="auth.js?v=4"></script>
+
+</body>
+</html>

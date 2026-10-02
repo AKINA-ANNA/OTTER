@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="theme-color" content="#f8fafc">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Otter — Student workspace</title>
+<script>
+/* Runs before the stylesheet so the page never paints the wrong theme.
+   Light is the default; only an explicit "dark" choice overrides it. */
+(function () {
+    var saved = null;
+    try { saved = localStorage.getItem("otter.student.theme"); } catch (error) { /* private mode */ }
+    document.documentElement.dataset.theme = saved === "dark" ? "dark" : "light";
+})();
+</script>
+<link rel="stylesheet" href="dashboard.css?v=48">
+<link rel="stylesheet" href="loading-screen.css?v=2">
+<link rel="stylesheet" href="tutorial.css?v=2">
+</head>
+<body>
+
+<div class="dashboard-shell">
+
+    <!-- =====================================================
+         TOP BAR — same switcher the teacher console uses
+    ====================================================== -->
+    <header class="app-nav">
+        <a class="dashboard-brand" href="dashboard.html" aria-label="Otter student desk">
+            <span class="dashboard-brand-mark" aria-hidden="true">O</span>
+            <span class="brand-text">
+                <strong>otter</strong>
+                <small>student desk</small>
+            </span>
+        </a>
+
+        <nav class="section-switch" aria-label="Sections">
+            <button class="section-tab active" data-tab="overview" type="button" aria-current="page"><i class="nav-glyph" data-lucide="layout-dashboard" aria-hidden="true"></i>Dashboard</button>
+            <button class="section-tab" data-tab="partProposal" type="button"><i class="nav-glyph" data-lucide="package-plus" aria-hidden="true"></i>Part requests</button>
+            <button class="section-tab" data-tab="borrowLogs" type="button"><i class="nav-glyph" data-lucide="clipboard-list" aria-hidden="true"></i>Borrow logs</button>
+            <button class="section-tab" data-tab="projectProposal" type="button"><i class="nav-glyph" data-lucide="folder-kanban" aria-hidden="true"></i>Projects</button>
+            <button class="section-tab" data-tab="labTimings" type="button"><i class="nav-glyph" data-lucide="calendar-days" aria-hidden="true"></i>Lab timings</button>
+
+            <!-- Pinned to the foot of the rail: nudge parts back on time -->
+            <aside class="rail-reminder">
+                <i class="rail-reminder-glyph" data-lucide="recycle" aria-hidden="true"></i>
+                <strong>Don't keep it. Float it.</strong>
+                <p>Return your parts on time so the next otter can get cracking.</p>
+            </aside>
+        </nav>
+
+        <div class="nav-utilities">
+            <span class="date-chip" id="currentDate">Today</span>
+            <button class="ghost-button theme-toggle" id="themeToggle" type="button">
+                <i class="ghost-icon theme-icon theme-icon-sun" data-lucide="sun" aria-hidden="true"></i>
+                <i class="ghost-icon theme-icon theme-icon-moon" data-lucide="moon" aria-hidden="true"></i>
+            </button>
+            <button class="ghost-button" id="refreshButton" type="button" title="Refresh dashboard data">
+                <i class="ghost-icon" data-lucide="refresh-cw" aria-hidden="true"></i>
+                <span>Refresh</span>
+            </button>
+            <div class="profile-menu">
+                <button class="profile-chip" id="profileButton" type="button" aria-label="Open profile details" aria-haspopup="dialog" aria-expanded="false" aria-controls="profilePopover">
+                    <span id="profileName">Student</span>
+                    <span class="profile-avatar" id="profileAvatar">ST</span>
+                    <i class="profile-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
+                </button>
+                <section class="profile-popover" id="profilePopover" role="dialog" aria-labelledby="profilePopoverTitle" hidden>
+                    <div class="profile-popover-heading">
+                        <strong id="profilePopoverTitle">Account profile</strong>
+                        <button class="profile-popover-close" id="profileClose" type="button" aria-label="Close profile details"><i data-lucide="x" aria-hidden="true"></i></button>
+                    </div>
+                    <dl class="profile-details">
+                        <div><dt>Name</dt><dd id="profileDetailName">Loading</dd></div>
+                        <div><dt>Email</dt><dd id="profileDetailEmail">Loading</dd></div>
+                        <div><dt>Phone</dt><dd id="profileDetailPhone">Loading</dd></div>
+                        <div><dt>Student ID</dt><dd id="profileDetailStudentId">Loading</dd></div>
+                        <div><dt>Class</dt><dd id="profileDetailClass">Loading</dd></div>
+                        <div><dt>Section</dt><dd id="profileDetailSection">Loading</dd></div>
+                        <div><dt>Email status</dt><dd id="profileDetailEmailStatus">Loading</dd></div>
+                        <div><dt>Account created</dt><dd id="profileDetailCreated">Loading</dd></div>
+                    </dl>
+                </section>
+            </div>
+            <button class="sign-out" id="signOutButton" type="button" aria-label="Sign out">
+                <i class="ghost-icon" data-lucide="log-out" aria-hidden="true"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- =====================================================
+         CONTENT
+    ====================================================== -->
+    <main class="dashboard-main">
+        <div class="page-heading">
+            <div class="page-heading-text">
+                <p class="eyebrow" id="todayLabel">Lab activity</p>
+                <h1><span id="pageLead">Dashboard</span> <span id="pageAccent" class="heading-accent"></span></h1>
+                <p id="pageDescription">Everything the lab has going on for you today.</p>
+            </div>
+            <div class="page-controls">
+                <button class="accent-button" id="newRequestButton" type="button">
+                    <i class="button-icon" data-lucide="plus" aria-hidden="true"></i>
+                    <span>New part request</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- -------------------------------------------------
+             DASHBOARD
+        -------------------------------------------------- -->
+        <section class="tab-view active" id="overviewView">
+            <div class="overview-grid">
+                <div class="metrics">
+                    <button class="metric-card metric-loans" type="button" data-goto-tab="borrowLogs">
+                        <span class="metric-icon" aria-hidden="true"><i class="metric-glyph" data-lucide="cpu"></i></span>
+                        <span class="metric-body"><span class="metric-label">Parts on loan</span><strong id="partsOnLoanTotal">—</strong><small>Currently with you</small></span>
+                        <i class="metric-arrow" data-lucide="chevron-right" aria-hidden="true"></i>
+                    </button>
+                    <button class="metric-card metric-overdue" type="button" data-goto-tab="borrowLogs" data-goto-filter="borrowStatusFilter" data-goto-value="overdue">
+                        <span class="metric-icon" aria-hidden="true"><i class="metric-glyph" data-lucide="clock-3"></i></span>
+                        <span class="metric-body"><span class="metric-label">Parts overdue</span><strong id="partsOverdueTotal">—</strong><small>Past their due date</small></span>
+                        <i class="metric-arrow" data-lucide="chevron-right" aria-hidden="true"></i>
+                    </button>
+                    <button class="metric-card metric-projects" type="button" data-goto-tab="projectProposal">
+                        <span class="metric-icon" aria-hidden="true"><i class="metric-glyph" data-lucide="hammer"></i></span>
+                        <span class="metric-body"><span class="metric-label">Projects joined</span><strong id="projectsTakenTotal">—</strong><small>Marked as interested</small></span>
+                        <i class="metric-arrow" data-lucide="chevron-right" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="dashboard-lower">
+                    <div class="feed-column">
+                        <section class="panel feed-panel">
+                            <div class="panel-header">
+                                <div class="panel-title">
+                                    <span class="panel-icon"><i class="panel-glyph" data-lucide="megaphone" aria-hidden="true"></i></span>
+                                    Latest from the den
+                                </div>
+                                <small>Teacher announcements</small>
+                            </div>
+                            <div class="post-list" id="postList"></div>
+                        </section>
+                    </div>
+
+                    <div class="right-column">
+                        <section class="panel deadline-panel">
+                            <div class="panel-header">
+                                <div class="panel-title">
+                                    <span class="panel-icon"><i class="panel-glyph" data-lucide="clock-3" aria-hidden="true"></i></span>
+                                    Deadlines
+                                </div>
+                                <small>Projects and loans</small>
+                            </div>
+                            <div class="deadline-list" id="deadlineList">
+                                <div class="empty-state compact-empty dashboard-empty-state">
+                                    <i class="dashboard-empty-icon" data-lucide="calendar-x" aria-hidden="true"></i>
+                                    <strong>No deadlines yet</strong>
+                                    <p>Return dates for your loans and deadlines for joined projects will appear here.</p>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- -------------------------------------------------
+             PART REQUESTS
+        -------------------------------------------------- -->
+        <section class="tab-view" id="partProposalView">
+            <div class="proposal-grid">
+                <div class="panel workspace-panel proposal-browse">
+                    <p class="eyebrow">Equipment desk</p>
+                    <h2>Part proposals</h2>
+                    <p>Search the parts registry, then add everything your build needs to the cart.</p>
+                    <div class="registry-searchbar">
+                        <label class="search-field">
+                            <span class="sr-only">Search parts</span>
+                            <i class="field-icon" data-lucide="search" aria-hidden="true"></i>
+                            <input id="partSearch" type="search" placeholder="Search parts, categories, locations..." aria-label="Search parts">
+                        </label>
+                        <label class="select-field">
+                            <span class="sr-only">Filter by category</span>
+                            <select id="partCategoryFilter" aria-label="Filter by category"><option value="">All categories</option></select>
+                        </label>
+                    </div>
+                    <div class="parts-grid" id="partsGrid"></div>
+                </div>
+
+                <aside class="panel workspace-panel proposal-cart">
+                    <p class="eyebrow">Your selection</p>
+                    <h2>Proposal cart</h2>
+                    <p id="cartSummary">No parts added yet.</p>
+                    <div class="cart-list" id="cartList">
+                        <div class="empty-state compact-empty"><strong>Cart is empty</strong><p>Add parts from the registry to start a proposal.</p></div>
+                    </div>
+                    <div class="cart-footer">
+                        <span class="cart-total" id="cartTotal">0 items</span>
+                        <button class="propose-button" id="proposeButton" type="button" disabled>Propose <i data-lucide="arrow-right" aria-hidden="true"></i></button>
+                    </div>
+                </aside>
+            </div>
+
+            <div class="panel workspace-panel request-history">
+                <p class="eyebrow">Request history</p>
+                <h2>Your proposals</h2>
+                <p>Follow your three most recent part requests and how each one is going.</p>
+                <div class="request-list" id="requestList"></div>
+            </div>
+        </section>
+
+        <!-- -------------------------------------------------
+             BORROW LOGS
+        -------------------------------------------------- -->
+        <section class="tab-view" id="borrowLogsView">
+            <div class="panel workspace-panel">
+                <p class="eyebrow">Equipment trail</p>
+                <h2>Borrow logs</h2>
+                <p>Every part you have borrowed — what is active, what's coming due, and the receipts to show when you collect them.</p>
+                <div class="borrow-history-tools" role="search" aria-label="Filter borrow logs">
+                    <label class="history-search">
+                        <span class="sr-only">Search borrow logs</span>
+                        <i class="field-icon" data-lucide="search" aria-hidden="true"></i>
+                        <input id="borrowSearch" type="search" placeholder="Search requests or parts..." aria-label="Search borrow logs">
+                    </label>
+                    <label class="history-filter">
+                        <span>Status</span>
+                        <select id="borrowStatusFilter" aria-label="Filter borrow logs by status">
+                            <option value="all">All activity</option>
+                            <option value="active">Still borrowing</option>
+                            <option value="overdue">Overdue</option>
+                            <option value="approved">Approved, not collected</option>
+                            <option value="pending">Awaiting review</option>
+                            <option value="declined">Declined</option>
+                            <option value="returned">Returned</option>
+                        </select>
+                    </label>
+                    <label class="history-filter history-date">
+                        <span>From</span>
+                        <input id="borrowDateFrom" type="date" aria-label="Borrow logs from date">
+                    </label>
+                    <label class="history-filter history-date">
+                        <span>To</span>
+                        <input id="borrowDateTo" type="date" aria-label="Borrow logs to date">
+                    </label>
+                    <span class="history-count" id="borrowHistoryCount" aria-live="polite"></span>
+                </div>
+                <div class="borrow-list" id="borrowList"></div>
+            </div>
+        </section>
+
+        <!-- -------------------------------------------------
+             PROJECTS
+        -------------------------------------------------- -->
+        <section class="tab-view" id="projectProposalView">
+            <div class="proposal-grid">
+                <div class="panel workspace-panel">
+                    <p class="eyebrow">Noise</p>
+                    <h2>Teacher events</h2>
+                    <p>Mark a project as interested, confirm attendance, then reach out and share it with your friends. Teachers see every share and can trim the list.</p>
+                    <div class="student-projects" id="studentProjects"></div>
+                </div>
+
+                <aside class="panel workspace-panel project-history-box">
+                    <button class="history-box-heading" id="projectHistoryToggle" type="button" aria-expanded="false" aria-controls="projectHistoryBackdrop" title="Open full project history">
+                        <span class="history-box-title"><strong>Project history</strong><small>Past events</small></span>
+                        <span class="history-box-count" id="projectHistoryCount">0</span>
+                    </button>
+                    <p class="history-box-desc">A project leaves the list the day after its date, and stays here for reference.</p>
+                    <div class="project-history-list" id="projectHistory"></div>
+                </aside>
+            </div>
+        </section>
+
+        <!-- -------------------------------------------------
+             LAB TIMINGS
+        -------------------------------------------------- -->
+        <section class="tab-view" id="labTimingsView">
+            <div class="lab-layout">
+                <div class="lab-calendar-panel">
+                    <div class="lab-cal-head">
+                        <button id="labPrevMonth" type="button" title="Previous month" aria-label="Previous month"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+                        <h2 id="labMonthLabel">Month</h2>
+                        <button id="labNextMonth" type="button" title="Next month" aria-label="Next month"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+                        <button class="lab-todaybtn" id="labToday" type="button">Today</button>
+                    </div>
+                    <p class="lab-cal-hint" id="labCalendarHint">Pick a day to see when the lab is open.</p>
+                    <div class="lab-legend">
+                        <span class="lab-legend-item"><i class="lab-swatch open" data-lucide="circle" aria-hidden="true"></i>Lab open</span>
+                        <span class="lab-legend-item"><i class="lab-swatch closed" data-lucide="minus" aria-hidden="true"></i>No lab</span>
+                        <span class="lab-legend-item"><i class="lab-swatch holiday" data-lucide="diamond" aria-hidden="true"></i>Holiday</span>
+                        <span class="lab-legend-item"><i class="lab-swatch weekend" aria-hidden="true"></i>Weekend</span>
+                    </div>
+                    <div class="lab-weekdays" aria-hidden="true">
+                        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                    </div>
+                    <div class="lab-daygrid" id="labDayGrid"></div>
+                    <div class="lab-jump">
+                        <button id="labPrevLabDay" type="button"><i data-lucide="arrow-left" aria-hidden="true"></i> Previous lab day</button>
+                        <button id="labNextLabDay" type="button">Next lab day <i data-lucide="arrow-right" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+
+                <aside class="lab-day-panel">
+                    <div class="lab-day-head">
+                        <p class="eyebrow">Selected day</p>
+                        <h3 id="labDayTitle">No day selected</h3>
+                        <p id="labDaySubtitle">Pick a date from the calendar.</p>
+                    </div>
+                    <div class="lab-day-summary" id="labDaySummary" hidden></div>
+                    <div class="lab-periods" id="labPeriodList" role="list"></div>
+                    <p class="lab-teacher-note">Teachers publish these timings. If something looks off, ask your teacher to update it.</p>
+                </aside>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- =====================================================
+     SHARE MODAL
+====================================================== -->
+<div class="modal-backdrop" id="inviteModal" aria-hidden="true">
+    <form class="modal-panel" id="inviteForm">
+        <div class="modal-head">
+            <div>
+                <p class="eyebrow">Noise</p>
+                <h2 id="inviteTitle">Reach out to friends</h2>
+            </div>
+            <button class="modal-close" id="inviteClose" type="button" aria-label="Cancel share"><i data-lucide="x" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="auth-field"><label for="inviteSearch">Find classmates</label><input id="inviteSearch" type="search" placeholder="Search by name..."></div>
+            <div class="invite-hint" id="inviteHint"></div>
+            <div class="invite-list" id="inviteList"></div>
+            <div class="invite-limits"><span id="inviteDailyLabel">Shares today: —/10</span><span id="invitePendingLabel">Already on this project: —</span></div>
+        </div>
+        <div class="modal-foot">
+            <p class="modal-hint">The project is shared with a friend — they see it as coming, and your teacher can remove them if needed.</p>
+            <button class="propose-button" id="sendInviteButton" type="submit" disabled>Send to friends <i data-lucide="arrow-right" aria-hidden="true"></i></button>
+        </div>
+    </form>
+</div>
+
+<!-- =====================================================
+     PROJECT HISTORY MODAL
+====================================================== -->
+<div class="modal-backdrop" id="projectHistoryBackdrop" aria-hidden="true">
+    <section class="modal-panel" id="projectHistoryExpandedPanel" role="dialog" aria-modal="true" aria-labelledby="projectHistoryExpandedTitle">
+        <div class="modal-head">
+            <div>
+                <p class="eyebrow">Project history</p>
+                <h2 id="projectHistoryExpandedTitle">Past project proposals</h2>
+            </div>
+            <button class="modal-close" id="projectHistoryClose" type="button" aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="history-filter-panel" id="projectHistoryFilterPanel">
+                <label class="history-search-field"><span>Search</span><input id="projectHistorySearch" type="search" placeholder="Project, teacher, or place..." aria-label="Search project history"></label>
+                <div class="history-filter-grid">
+                    <label><span>Ended from</span><input id="projectHistoryDateFrom" type="date" aria-label="Project history from date"></label>
+                    <label><span>Ended to</span><input id="projectHistoryDateTo" type="date" aria-label="Project history to date"></label>
+                </div>
+            </div>
+            <div class="project-history-list" id="projectHistoryFull"></div>
+        </div>
+    </section>
+</div>
+
+<!-- =====================================================
+     PROPOSE MODAL
+====================================================== -->
+<div class="modal-backdrop" id="proposeModal" aria-hidden="true">
+    <form class="modal-panel" id="proposeForm">
+        <div class="modal-head">
+            <div>
+                <p class="eyebrow">Draft proposal</p>
+                <h2>Request these parts</h2>
+            </div>
+            <button class="modal-close" id="proposeClose" type="button" aria-label="Cancel proposal"><i data-lucide="x" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-items" id="proposeItems"></div>
+            <div class="auth-field"><label for="proposeReason">Reason for borrowing</label><textarea id="proposeReason" maxlength="600" placeholder="Explain what you are building and why you need these parts..." required></textarea></div>
+            <div class="auth-field">
+                <label for="proposeDuration">Borrow for</label>
+                <div class="duration-row">
+                    <select id="proposeDuration" required>
+                        <option value="3">3 days</option>
+                        <option value="7" selected>7 days</option>
+                        <option value="10">10 days</option>
+                        <option value="14">14 days</option>
+                    </select>
+                </div>
+                <small class="duration-note">Fixed durations — choose the one that fits your build.</small>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <p class="modal-hint">Your teacher will review this request before the parts are reserved.</p>
+            <button class="propose-button" type="submit">Send proposal <i data-lucide="arrow-right" aria-hidden="true"></i></button>
+        </div>
+    </form>
+</div>
+
+<!-- =====================================================
+     RECEIPT MODAL
+====================================================== -->
+<div class="modal-backdrop" id="receiptModal" aria-hidden="true">
+    <div class="modal-panel receipt-panel" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
+        <div class="modal-head">
+            <div>
+                <p class="eyebrow">Pick-up receipt</p>
+                <h2 id="receiptTitle">Borrow log</h2>
+            </div>
+            <button class="modal-close" id="receiptClose" type="button" aria-label="Close receipt"><i data-lucide="x" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body" id="receiptBody"></div>
+    </div>
+</div>
+
+<div id="dashboardToast" role="status" aria-live="polite">Copied to clipboard</div>
+
+<script src="loading-screen.js?v=2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    const lucideScript = document.createElement("script");
+    lucideScript.src = "https://unpkg.com/lucide@latest";
+    lucideScript.async = true;
+    lucideScript.onload = () => lucide.createIcons();
+    document.head.append(lucideScript);
+</script>
+<script src="social.js?v=4"></script>
+<script src="lab-timings.js?v=2"></script>
+<script src="tutorial-content.js?v=1"></script>
+<script src="tutorial.js?v=3"></script>
+<script src="elastic-grid.js?v=4"></script>
+<script src="dashboard.js?v=44"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-otter-loading-manual>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otter — Admin login</title>
+    <link rel="stylesheet" href="admin.css">
+    <link rel="stylesheet" href="loading-screen.css?v=2">
+</head>
+<body>
+    <main class="auth-wrap">
+        <section class="auth-panel">
+            <a class="admin-brand" href="index.html"><span class="admin-mark">O</span><span><strong>otter admin</strong><small>restricted workspace</small></span></a>
+            <h1>Admin sign in</h1>
+            <p>Review safety flags, manage the parts registry, and keep the student community healthy.</p>
+            <form id="adminLoginForm">
+                <div class="auth-field"><label for="adminEmail">Admin email</label><input id="adminEmail" type="email" autocomplete="username" required></div>
+                <div class="auth-field"><label for="adminPassword">Password</label><input id="adminPassword" type="password" autocomplete="current-password" required></div>
+                <button class="auth-submit" type="submit">Enter admin console</button>
+                <p class="auth-error" id="adminLoginError"></p>
+            </form>
+            <div class="auth-switch"><a href="#" id="adminShowReset">Forgot your password? Reset it with your invite code</a></div>
+            <form id="adminResetForm" hidden>
+                <div class="auth-field"><label for="adminResetEmail">Admin email</label><input id="adminResetEmail" type="email" autocomplete="username"></div>
+                <div class="auth-field"><label for="adminResetCode">Invite code</label><input id="adminResetCode" type="password" autocomplete="off"></div>
+                <div class="auth-field"><label for="adminResetPassword">New password</label><input id="adminResetPassword" type="password" autocomplete="new-password"></div>
+                <div class="auth-field"><label for="adminResetPassword2">New password again</label><input id="adminResetPassword2" type="password" autocomplete="new-password"></div>
+                <button class="auth-submit" type="submit">Reset password</button>
+                <p class="auth-error" id="adminResetError"></p>
+                <div class="auth-switch"><a href="#" id="adminHideReset">Back to sign in</a></div>
+            </form>
+            <div class="auth-switch">Need the first admin account? <a href="admin-signup.html">Use an invite code</a></div>
+        </section>
+    </main>
+    <script src="loading-screen.js?v=2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="admin-auth.js?v=8"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-otter-loading-manual>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otter — Teacher login</title>
+    <link rel="stylesheet" href="teacher.css">
+    <link rel="stylesheet" href="loading-screen.css?v=2">
+</head>
+<body>
+    <main class="auth-wrap">
+        <section class="auth-panel">
+            <a class="teacher-brand" href="index.html"><span class="teacher-mark">O</span><span><strong>otter teachers</strong><small>review workspace</small></span></a>
+            <h1>Teacher sign in</h1>
+            <p>Review part requests, approve proposals, and keep the lab inventory on track.</p>
+            <form id="teacherLoginForm">
+                <div class="auth-field"><label for="teacherEmail">Teacher email</label><input id="teacherEmail" type="email" autocomplete="username" required></div>
+                <div class="auth-field"><label for="teacherPassword">Password</label><input id="teacherPassword" type="password" autocomplete="current-password" required></div>
+                <button class="auth-submit" type="submit">Enter teacher console</button>
+                <p class="auth-error" id="teacherLoginError"></p>
+            </form>
+            <div class="auth-switch"><a href="#" id="teacherShowReset">Forgot your password? Reset it with your invite code</a></div>
+            <form id="teacherResetForm" hidden>
+                <div class="auth-field"><label for="teacherResetEmail">Teacher email</label><input id="teacherResetEmail" type="email" autocomplete="username"></div>
+                <div class="auth-field"><label for="teacherResetCode">Invite code</label><input id="teacherResetCode" type="password" autocomplete="off"></div>
+                <div class="auth-field"><label for="teacherResetPassword">New password</label><input id="teacherResetPassword" type="password" autocomplete="new-password"></div>
+                <div class="auth-field"><label for="teacherResetPassword2">New password again</label><input id="teacherResetPassword2" type="password" autocomplete="new-password"></div>
+                <button class="auth-submit" type="submit">Reset password</button>
+                <p class="auth-error" id="teacherResetError"></p>
+                <div class="auth-switch"><a href="#" id="teacherHideReset">Back to sign in</a></div>
+            </form>
+            <div class="auth-switch">New teacher? <a href="teacher-signup.html">Use an invite code</a></div>
+        </section>
+    </main>
+    <script src="loading-screen.js?v=2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="teacher-auth.js?v=4"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otter — Admin signup</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <main class="auth-wrap">
+        <section class="auth-panel">
+            <a class="admin-brand" href="index.html"><span class="admin-mark">O</span><span><strong>otter admin</strong><small>restricted workspace</small></span></a>
+            <h1>Activate admin access</h1>
+            <p>Use the same email and password as your student account, plus the private committee invite code.</p>
+            <form id="adminSignupForm">
+                <div class="auth-field"><label for="adminName">Name</label><input id="adminName" type="text" autocomplete="name" required></div>
+                <div class="auth-field"><label for="adminEmail">Admin email</label><input id="adminEmail" type="email" autocomplete="email" required></div>
+                <div class="auth-field"><label for="adminPassword">Account password</label><input id="adminPassword" type="password" autocomplete="current-password" required></div>
+                <div class="auth-field"><label for="adminInvite">Private invite code</label><input id="adminInvite" type="password" autocomplete="off" required></div>
+                <button class="auth-submit" type="submit">Activate admin access</button>
+                <p class="auth-error" id="adminSignupError"></p>
+            </form>
+            <div class="auth-switch">Already have access? <a href="admin-login.html">Admin login</a></div>
+        </section>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="admin-auth.js?v=5"></script>
+</body>
+</html>
