@@ -1,7 +1,10 @@
-# Otter Lab
+## Otter Lab
 
-Otter is a browser-based lab equipment workspace for students, teachers, and administrators. It uses plain HTML, CSS, and JavaScript with Supabase for authentication, database access, and live updates.
+Otter is a browser-based lab equipment workspace for students, teachers, and administrators. It uses plain HTML, CSS, and JavaScript with Supabase for authentication, database access, live updates and many more features.
 
+
+## Purpose
+ Each dashboard serves its own function the student make requests and teachers manage the students requests and many more but it would be natural to think admins are responsible to control both the dashboards but in this application admins have the sole pupose to manage the labs parts and that is why ALE the AI assistant has been provided to handle loads of parts data easily 
 ## Workspaces
 
 - **Student portal** (`index.html`): sign in or create an account, request equipment, follow loans and deadlines, see announcements and projects, and check lab hours.
@@ -45,3 +48,6 @@ ALE calls the Supabase Edge Function `ale-chat`. Deploy the function and configu
 - Supabase JS, Google Fonts, and the student dashboard’s Lucide icons are loaded from CDNs, so those features need an internet connection.
 - The admin AI uses the configured Edge Function; the OpenRouter key should only be stored as a Supabase function secret.
 - The client pages contain no build or test scripts. Validate JavaScript changes with `node --check <file.js>` and test the role-specific flows against a configured Supabase project.
+- You might have noticed the test clock feature or the admin secret invite codes I would ask to not abuse the invite codes   as it might cause chaos with numerous differing invite codes and the test clock is a temporary feature in this tester version and will be removed later.
+
+## DISCLAIMER : THIS IS A TESTER VERSION BUGS OR UNEXPECTED BEHAVIOUS ARE EXPECTED TO OCCUR BUT STILL IF FOUND PLEASE REPORT TO THE DEVS 
