@@ -84,6 +84,7 @@ if (loginForm) {
                     return;
                 }
             }
+            window.OtterFavicon?.apply("admin");
             window.location.href = "admin.html";
         } catch (error) {
             console.error("Admin sign-in failed:", error);
@@ -192,6 +193,7 @@ if (signupForm) {
             }
             const claimed = await verifyAdmin();
             if (!claimed) { message("The invite code was not accepted."); return; }
+            window.OtterFavicon?.apply("admin");
             window.location.href = "admin.html";
             return;
         }
@@ -209,6 +211,7 @@ if (signupForm) {
         if (data.session) {
             const claimed = await verifyAdmin();
             if (!claimed) { message("The invite code was not accepted."); return; }
+            window.OtterFavicon?.apply("admin");
             window.location.href = "admin.html";
             return;
         }

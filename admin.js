@@ -75,6 +75,7 @@ async function requireAdmin() {
     if (!user) { window.location.href = "admin-login.html"; return null; }
     const { data: isAdmin, error } = await supabaseClient.rpc("is_admin");
     if (error || !isAdmin) { await supabaseClient.auth.signOut(); window.location.href = "admin-login.html"; return null; }
+    window.OtterFavicon?.apply("admin");
     document.getElementById("adminIdentity").textContent = user.email || "Admin";
     window.OtterAccount?.mount({
         client: supabaseClient,

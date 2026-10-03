@@ -83,6 +83,7 @@ if (loginForm) {
                     return;
                 }
             }
+            window.OtterFavicon?.apply("teacher");
             window.location.href = "teacher.html";
         } catch (error) {
             console.error("Teacher sign-in failed:", error);
@@ -191,6 +192,7 @@ if (signupForm) {
             }
             const claimed = await verifyTeacher();
             if (!claimed) { message("The invite code was not accepted."); return; }
+            window.OtterFavicon?.apply("teacher");
             window.location.href = "teacher.html";
             return;
         }
@@ -208,6 +210,7 @@ if (signupForm) {
         if (data.session) {
             const claimed = await verifyTeacher();
             if (!claimed) { message("The invite code was not accepted."); return; }
+            window.OtterFavicon?.apply("teacher");
             window.location.href = "teacher.html";
             return;
         }

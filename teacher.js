@@ -1930,6 +1930,7 @@ async function initialiseTeacher() {
         return;
     }
     currentUser = user;
+    window.OtterFavicon?.apply("teacher");
     const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Teacher";
     currentUser.name = displayName;
     document.getElementById("teacherIdentity").textContent = displayName;

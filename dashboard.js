@@ -24,6 +24,48 @@ let shareDailyCount = 0;
 let sharePick = {};
 let shareClosed = [];
 
+/* ============================================================
+   AI PARTS MATCHER (Supabase Edge Function Integration)
+============================================================ */
+async function callPartsMatcher(query) {
+    const token = (await supabaseClient.auth.getSession()).data.session?.access_token;
+    if (!token) throw new Error("You must be signed in to use AI part search.");
+    const attempts = 3;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/parts-matcher`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ query })
+        });
+        if (response.ok) {
+            const payload = await response.json();
+            const message = payload.message;
+            if (!message) throw new Error("Empty AI response");
+            return message;
+        }
+        const retryable = response.status === 429 || response.status >= 500;
+        if (!retryable || attempt === attempts - 1) {
+            if (response.status === 429) throw new Error("AI search is busy right now. Please try again in a moment.");
+            throw new Error(`AI part search failed (${response.status}). Please try again.`);
+        }
+        const retryAfter = Number(response.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1400 * (attempt + 1);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
+    throw new Error("AI service is unavailable right now. Please try again.");
+}
+
+function parseAiJsonResponse(text) {
+    let clean = (text || "").trim();
+    clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const firstBrace = clean.indexOf("{");
+    const lastBrace = clean.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        clean = clean.slice(firstBrace, lastBrace + 1);
+    }
+    return JSON.parse(clean);
+}
+
 let simClock = { simulated_at: null, label: null };
 function clockNow() { return simClock.simulated_at ? new Date(simClock.simulated_at) : new Date(); }
 async function refreshSimClock(){
@@ -92,7 +134,8 @@ const MODAL_CLOSERS = {
     proposeModal: closeProposeModal,
     receiptModal: closeReceipt,
     projectHistoryBackdrop: closeProjectHistoryModal,
-    inviteModal: () => closeModal("inviteModal")
+    inviteModal: () => closeModal("inviteModal"),
+    aiPartSearchModal: closeAiPartModal
 };
 
 let lastFocused = null;
@@ -278,10 +321,255 @@ async function loadAnnouncements() {
     renderPosts(posts);
 }
 
+/* ============================================================
+   AI PART MATCHER STATE & LOGIC
+============================================================ */
+
+window.aiPartMatches = null;
+let aiLastSearchResults = null;
+let aiLastQuery = "";
+let aiSearchInProgress = false;
+
+function openAiPartModal() {
+    openModal("aiPartSearchModal");
+    const descField = document.getElementById("aiPartDescription");
+    if (descField) {
+        setTimeout(() => descField.focus(), 120);
+    }
+}
+
+function closeAiPartModal() {
+    closeModal("aiPartSearchModal");
+}
+
+function renderAiIdleState() {
+    const wrapper = document.getElementById("aiResultsWrapper");
+    if (!wrapper) return;
+    wrapper.innerHTML = `
+        <div class="ai-idle-state" id="aiIdleState">
+            <div class="ai-idle-icon-wrap">
+                <i data-lucide="cpu" aria-hidden="true"></i>
+            </div>
+            <strong>Ready to find parts</strong>
+            <p>Describe what you need or click one of the suggestions above.</p>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+}
+
+function renderAiLoadingState() {
+    const wrapper = document.getElementById("aiResultsWrapper");
+    if (!wrapper) return;
+    wrapper.innerHTML = `
+        <div class="ai-loading-state">
+            <div class="ai-scanner-orb">
+                <i data-lucide="sparkles"></i>
+            </div>
+            <strong>Analyzing lab parts inventory...</strong>
+            <p>Matching your description against component functions, specs, pinouts, and physical characteristics.</p>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+}
+
+function renderAiErrorState(errorMessage) {
+    const wrapper = document.getElementById("aiResultsWrapper");
+    if (!wrapper) return;
+    wrapper.innerHTML = `
+        <div class="ai-error-state">
+            <i data-lucide="alert-triangle" class="ai-error-icon"></i>
+            <strong>AI Search Encountered an Issue</strong>
+            <p>${escapeHtml(errorMessage)}</p>
+            <button type="button" class="ai-retry-btn" id="aiRetryBtn">Try Again</button>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    const retryBtn = document.getElementById("aiRetryBtn");
+    if (retryBtn) {
+        retryBtn.addEventListener("click", () => {
+            const desc = document.getElementById("aiPartDescription")?.value || "";
+            if (desc.trim()) executeAiPartSearch(desc.trim());
+        });
+    }
+}
+
+function renderAiMatches(matches, summary, query) {
+    const wrapper = document.getElementById("aiResultsWrapper");
+    if (!wrapper) return;
+
+    if (!matches || matches.length === 0) {
+        wrapper.innerHTML = `
+            <div class="ai-empty-state">
+                <i data-lucide="search-x" class="ai-empty-icon"></i>
+                <strong>No matching parts found</strong>
+                <p>We couldn't find a part in the lab catalog matching "${escapeHtml(query)}". Try describing the function or appearance with different keywords.</p>
+            </div>
+        `;
+        if (window.lucide) lucide.createIcons();
+        return;
+    }
+
+    const cardsHtml = matches.map(match => {
+        const part = match.part;
+        const isInCart = Boolean(partCart[part.id]);
+        const confidenceLabel = match.confidence === "high" ? "Top Match" : match.confidence === "medium" ? "Good Match" : "Possible Match";
+        const confidenceClass = `ai-badge-${match.confidence || "medium"}`;
+
+        return `
+            <div class="ai-match-card ${match.confidence === 'high' ? 'ai-high-match' : ''}" data-part-id="${escapeHtml(part.id)}">
+                <div class="ai-card-main">
+                    <div class="ai-card-top">
+                        <span class="ai-match-badge ${confidenceClass}">${confidenceLabel}</span>
+                        <span class="ai-part-cat">${escapeHtml(part.category || "General")}</span>
+                    </div>
+                    <h3 class="ai-part-name">${escapeHtml(part.name)}</h3>
+                    <p class="ai-part-reason">${escapeHtml(match.reason || "Matches requested requirements.")}</p>
+                    ${match.matched_features && match.matched_features.length ? `
+                        <div class="ai-part-features">
+                            ${match.matched_features.map(f => `<span class="ai-feat-pill">${escapeHtml(f)}</span>`).join("")}
+                        </div>
+                    ` : ""}
+                    <div class="ai-part-meta-row">
+                        <span class="ai-part-loc"><i data-lucide="map-pin"></i> ${escapeHtml(part.location || "Lab storage")}</span>
+                        <span class="ai-part-stock ${part.quantity > 0 ? "" : "out-of-stock"}">
+                            ${part.quantity > 0 ? `${part.quantity} in stock` : "Out of stock"}
+                        </span>
+                    </div>
+                </div>
+                <div class="ai-card-actions">
+                    <button class="add-button ${isInCart ? "added" : ""}" data-cart-action="toggle" type="button">
+                        ${isInCart ? "In cart ✓" : "Add to cart"}
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    wrapper.innerHTML = `
+        <div class="ai-results-header">
+            <div class="ai-results-count">
+                <i data-lucide="check-circle-2" class="ai-check-icon"></i>
+                <span>Found <strong>${matches.length}</strong> matching part${matches.length > 1 ? "s" : ""}</span>
+            </div>
+            <button type="button" class="ai-apply-filter-btn" id="aiApplyFilterBtn">
+                <i data-lucide="filter"></i>
+                <span>Filter Main Catalog</span>
+            </button>
+        </div>
+        ${summary ? `<div class="ai-analysis-summary"><i data-lucide="sparkles"></i><span>${escapeHtml(summary)}</span></div>` : ""}
+        <div class="ai-matches-list">
+            ${cardsHtml}
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+
+    const applyBtn = document.getElementById("aiApplyFilterBtn");
+    if (applyBtn) {
+        applyBtn.addEventListener("click", () => {
+            applyAiMatchesToCatalog(matches, query);
+        });
+    }
+}
+
+async function executeAiPartSearch(rawQuery) {
+    if (aiSearchInProgress) return;
+    const query = (rawQuery || "").trim();
+    if (!query) {
+        const input = document.getElementById("aiPartDescription");
+        if (input) {
+            input.focus();
+        }
+        showToast("Please describe the part function or appearance");
+        return;
+    }
+
+    if (!inventoryParts || inventoryParts.length === 0) {
+        renderAiErrorState("Lab parts inventory is empty or still loading. Please try again shortly.");
+        return;
+    }
+
+    const submitBtn = document.getElementById("aiSubmitSearchBtn");
+    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : "";
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Matching...`;
+        if (window.lucide) lucide.createIcons();
+    }
+    aiSearchInProgress = true;
+    renderAiLoadingState();
+
+    try {
+        const rawResponse = await callPartsMatcher(query);
+
+        let parsed;
+        try {
+            parsed = parseAiJsonResponse(rawResponse);
+        } catch (e) {
+            console.error("AI JSON parse error:", e, rawResponse);
+            throw new Error("Could not understand AI response format. Please try again.");
+        }
+
+        const rawMatches = Array.isArray(parsed?.matches) ? parsed.matches : [];
+        const partMap = new Map(inventoryParts.map(p => [p.id, p]));
+
+        const validMatches = [];
+        for (const m of rawMatches) {
+            if (m && m.id && partMap.has(m.id)) {
+                validMatches.push({
+                    part: partMap.get(m.id),
+                    confidence: m.confidence || "medium",
+                    reason: m.reason || `Matches description for ${partMap.get(m.id).name}.`,
+                    matched_features: Array.isArray(m.matched_features) ? m.matched_features : []
+                });
+            }
+        }
+
+        aiLastSearchResults = validMatches;
+        aiLastQuery = query;
+        renderAiMatches(validMatches, parsed.summary || "", query);
+
+    } catch (err) {
+        console.error("AI Search failed:", err);
+        renderAiErrorState(err.message || "Failed to contact AI service. Please check your network connection.");
+    } finally {
+        aiSearchInProgress = false;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnHtml;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+function applyAiMatchesToCatalog(matches, query) {
+    if (!matches || !matches.length) return;
+    window.aiPartMatches = matches.map(m => m.part.id);
+    const filterBar = document.getElementById("aiActiveFilterBar");
+    const queryEl = document.getElementById("aiActiveFilterQuery");
+    if (filterBar && queryEl) {
+        queryEl.textContent = `"${query}" (${matches.length} found)`;
+        filterBar.style.display = "flex";
+    }
+    const partSearchInput = document.getElementById("partSearch");
+    if (partSearchInput) partSearchInput.value = "";
+    renderPartsGrid();
+    closeAiPartModal();
+    showToast(`Showing ${matches.length} AI suggested parts`);
+}
+
+function clearAiCatalogFilter() {
+    window.aiPartMatches = null;
+    const filterBar = document.getElementById("aiActiveFilterBar");
+    if (filterBar) filterBar.style.display = "none";
+    renderPartsGrid();
+    showToast("Showing all catalog parts");
+}
+
 async function loadInventoryParts() {
     const { data: parts, error } = await supabaseClient
         .from("inventory_parts")
-        .select("id, name, category, quantity, location")
+        .select("id, name, category, quantity, location, notes, ai_use")
         .order("name", { ascending: true });
     if (error) {
         console.error("Registry load error:", error);
@@ -311,11 +599,23 @@ function populateCategoryFilter() {
 function visibleParts() {
     const query = document.getElementById("partSearch").value.trim().toLowerCase();
     const category = document.getElementById("partCategoryFilter").value;
-    return inventoryParts.filter(part => {
-        const matchesQuery = !query || `${part.name} ${part.category} ${part.location}`.toLowerCase().includes(query);
-        const matchesCategory = !category || part.category === category;
-        return matchesQuery && matchesCategory;
-    });
+    let parts = inventoryParts;
+
+    if (window.aiPartMatches && Array.isArray(window.aiPartMatches) && window.aiPartMatches.length > 0) {
+        const matchMap = new Map(window.aiPartMatches.map((id, index) => [id, index]));
+        parts = parts.filter(p => matchMap.has(p.id));
+        parts.sort((a, b) => matchMap.get(a.id) - matchMap.get(b.id));
+    } else if (query) {
+        parts = parts.filter(part => {
+            const searchable = `${part.name} ${part.category || ""} ${part.location || ""} ${part.notes || ""} ${part.ai_use || ""}`.toLowerCase();
+            return searchable.includes(query);
+        });
+    }
+
+    if (category) {
+        parts = parts.filter(part => part.category === category);
+    }
+    return parts;
 }
 
 function renderPartsGrid() {
@@ -1080,6 +1380,11 @@ document.addEventListener("click", async event => {
         }
         renderPartsGrid();
         renderCart();
+        document.querySelectorAll(`#aiPartSearchModal [data-part-id="${partId}"] [data-cart-action="toggle"]`).forEach(btn => {
+            const added = Boolean(partCart[partId]);
+            btn.textContent = added ? "In cart ✓" : "Add to cart";
+            btn.classList.toggle("added", added);
+        });
         return;
     }
 
@@ -1121,8 +1426,81 @@ document.addEventListener("click", async event => {
     if (event.target.closest(".modal-backdrop") === event.target) closeTopModal();
 });
 
-document.getElementById("partSearch").addEventListener("input", renderPartsGrid);
+const partSearchEl = document.getElementById("partSearch");
+if (partSearchEl) {
+    partSearchEl.addEventListener("input", () => {
+        if (window.aiPartMatches) {
+            window.aiPartMatches = null;
+            const filterBar = document.getElementById("aiActiveFilterBar");
+            if (filterBar) filterBar.style.display = "none";
+        }
+        renderPartsGrid();
+    });
+    partSearchEl.addEventListener("keydown", async (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            renderPartsGrid();
+        }
+    });
+}
 document.getElementById("partCategoryFilter").addEventListener("change", renderPartsGrid);
+
+function initAiMatcher() {
+    const aiBtn = document.getElementById("aiPartSearchBtn");
+    if (aiBtn && !aiBtn.dataset.bound) {
+        aiBtn.dataset.bound = "true";
+        aiBtn.addEventListener("click", function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openAiPartModal();
+        });
+    }
+
+    const closeBtn = document.getElementById("aiPartSearchClose");
+    if (closeBtn) closeBtn.addEventListener("click", closeAiPartModal);
+
+    const footCloseBtn = document.getElementById("aiModalCloseBtn");
+    if (footCloseBtn) footCloseBtn.addEventListener("click", closeAiPartModal);
+
+    const submitBtn = document.getElementById("aiSubmitSearchBtn");
+    if (submitBtn) {
+        submitBtn.addEventListener("click", () => {
+            const desc = document.getElementById("aiPartDescription")?.value || "";
+            executeAiPartSearch(desc);
+        });
+    }
+
+    const descInput = document.getElementById("aiPartDescription");
+    if (descInput) {
+        descInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                executeAiPartSearch(descInput.value);
+            }
+        });
+    }
+
+    document.querySelectorAll(".ai-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+            const query = chip.dataset.query;
+            if (descInput) descInput.value = query;
+            executeAiPartSearch(query);
+        });
+    });
+
+    const clearFilterBtn = document.getElementById("aiClearFilterBtn");
+    if (clearFilterBtn) {
+        clearFilterBtn.addEventListener("click", clearAiCatalogFilter);
+    }
+
+
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAiMatcher);
+} else {
+    initAiMatcher();
+}
 document.getElementById("proposeButton").addEventListener("click", openProposeModal);
 document.getElementById("proposeClose").addEventListener("click", closeProposeModal);
 document.getElementById("proposeForm").addEventListener("submit", submitProposal);
@@ -1461,6 +1839,7 @@ async function initialiseDashboard() {
     }
     const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "student";
     currentUser.name = displayName;
+    window.OtterFavicon?.apply("student");
     if (profileResult.error) console.warn("Could not load profile details:", profileResult.error.message);
     renderProfileDetails(user, profileResult.data);
     renderDashboardDate();
