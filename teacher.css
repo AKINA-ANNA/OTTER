@@ -542,6 +542,10 @@ body {
 .teacher-nav button.active { background: #292a28; color: #fffdf5; font-weight: 800; }
 .nav-icon { width: 14px; color: var(--yellow); font-size: 13px; text-align: center; }
 .teacher-nav button.active .nav-icon { color: var(--lime); }
+
+/* Phones get a bottom tab bar, where seven full labels will not fit across
+   the screen. Only the short label is ever painted there. */
+.nav-short { display: none; }
 .teacher-sidebar-footer { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; margin: 0 0 0 auto; padding: 0 0 0 12px; border-top: 0; color: var(--muted); font-size: 12px; }
 .teacher-sidebar-footer button { color: var(--ink); }
 
@@ -1252,4 +1256,88 @@ body {
     .lab-tt-row { grid-template-columns: auto minmax(0, 1fr); }
     .lab-tt-field { grid-column: 1 / -1; }
     .lab-tt-key { align-self: center; }
+}
+
+/* ========================================================================
+   PHONE NAVIGATION — TEACHER DESK
+   --------------------------------------------------------------------
+   The seven sections used to collapse into a shortened pill row that still
+   overflowed, so it scrolled sideways and hid tabs off-screen. On phones
+   they move to a bottom bar instead: all seven visible, nothing to scroll,
+   and the sticky top bar keeps only the brand and the sign-out button.
+
+   Two details this depends on:
+
+   1. backdrop-filter on .teacher-sidebar makes it the containing block for
+      position: fixed children, so the bar would anchor to the sidebar
+      instead of the viewport. The blur is dropped at this size (the panel
+      is 92% opaque anyway) to restore viewport-relative positioning.
+   2. The bar inherits the sidebar's stacking context, so the sidebar is
+      lowered under .modal-backdrop (z-index 20) to keep dialogs on top.
+   ======================================================================== */
+@media (max-width: 620px) {
+    .teacher-sidebar {
+        flex-wrap: nowrap;
+        backdrop-filter: none;
+        z-index: 15;
+    }
+
+    .teacher-nav {
+        position: fixed;
+        top: auto;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        order: auto;
+        flex: none;
+        width: auto;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        align-items: stretch;
+        gap: 2px;
+        padding: 5px 5px calc(5px + env(safe-area-inset-bottom, 0px));
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-radius: 0;
+        background: rgba(255, 253, 246, .97);
+        overflow: visible;
+    }
+
+    .teacher-nav button {
+        flex: 1 1 0;
+        min-width: 0;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        min-height: 52px;
+        padding: 6px 1px;
+        border-radius: 12px;
+        font-size: 9px;
+        line-height: 1.1;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .teacher-nav .nav-icon { width: auto; font-size: 15px; }
+    .nav-short { display: inline; }
+    .nav-full { display: none; }
+
+    /* Badge rides the button's corner so it cannot widen a tab. */
+    .teacher-nav .nav-count {
+        position: absolute;
+        top: 4px;
+        right: 3px;
+        min-width: 15px;
+        padding: 0 4px;
+        font-size: 9px;
+        line-height: 1.5;
+    }
+
+    .teacher-main { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* Narrow phones: seven columns is the tight case, and "Collateral" is the
+   longest label. Trim the type a step rather than let it touch the edges. */
+@media (max-width: 370px) {
+    .teacher-nav button { font-size: 8px; padding: 6px 0; }
+    .teacher-nav .nav-icon { font-size: 14px; }
 }
