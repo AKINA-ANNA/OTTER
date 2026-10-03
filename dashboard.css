@@ -376,6 +376,10 @@ small { font-size: var(--fs-xs); }
 
 .section-tab:hover { background: var(--raised-2); color: var(--ink); }
 
+/* Phones get the bottom tab bar, where the rail's full labels won't fit
+   across five columns. Only the short label is ever painted there. */
+.section-tab-short { display: none; }
+
 .section-tab.active {
     border-left-color: var(--active-border);
     background: var(--active-bg);
@@ -2827,10 +2831,53 @@ select {
 }
 
 @media (max-width: 640px) {
-    .app-nav { padding: 9px 14px; gap: 8px; }
-    .section-switch { order: 3; width: 100%; }
-    .section-tab { padding: 6px 9px; gap: 5px; font-size: var(--fs-sm); }
-    .dashboard-main { padding-top: 18px; }
+    /* Phone navigation: the rail becomes a bottom tab bar, so the top bar
+       stays one slim row and all five sections are visible at once instead
+       of hiding behind a sideways scroller. */
+    .app-nav { flex-wrap: nowrap; padding: 8px 12px; gap: 8px; min-height: 52px; }
+    .dashboard-main { padding-top: 18px; padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+
+    .section-switch {
+        position: fixed;
+        top: auto;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 40;
+        width: auto;
+        height: auto;
+        flex: none;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 2px;
+        padding: 5px 5px calc(5px + env(safe-area-inset-bottom, 0px));
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-radius: 0;
+        background: var(--chrome);
+        box-shadow: none;
+        overflow: visible;
+    }
+
+    .section-tab {
+        flex: 1 1 0;
+        min-width: 0;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        min-height: 50px;
+        padding: 5px 2px;
+        border-left: 0;
+        border-radius: var(--r-sm);
+        font-size: var(--fs-2xs);
+        line-height: 1.1;
+        text-align: center;
+    }
+    .section-tab .nav-glyph { width: 20px; height: 20px; flex: 0 0 20px; }
+    .section-tab.active { border-left: 0; }
+    .section-tab.active .nav-glyph { color: var(--accent); }
+    .section-tab-short { display: inline; }
+    .section-tab-full { display: none; }
     .page-heading { flex-direction: column; align-items: stretch; }
     .page-controls { width: 100%; }
     .accent-button { width: 100%; justify-content: center; }

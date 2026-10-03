@@ -16,7 +16,7 @@
     document.documentElement.dataset.theme = saved === "dark" ? "dark" : "light";
 })();
 </script>
-<link rel="stylesheet" href="dashboard.css?v=53">
+<link rel="stylesheet" href="dashboard.css?v=54">
 <link rel="stylesheet" href="loading-screen.css?v=3">
 <link rel="stylesheet" href="tutorial.css?v=2">
 <link rel="stylesheet" href="account-deletion.css?v=1">
@@ -38,11 +38,11 @@
         </a>
 
         <nav class="section-switch" aria-label="Sections">
-            <button class="section-tab active" data-tab="overview" type="button" aria-current="page"><i class="nav-glyph" data-lucide="layout-dashboard" aria-hidden="true"></i>Dashboard</button>
-            <button class="section-tab" data-tab="partProposal" type="button"><i class="nav-glyph" data-lucide="package-plus" aria-hidden="true"></i>Part requests</button>
-            <button class="section-tab" data-tab="borrowLogs" type="button"><i class="nav-glyph" data-lucide="clipboard-list" aria-hidden="true"></i>Borrow logs</button>
-            <button class="section-tab" data-tab="projectProposal" type="button"><i class="nav-glyph" data-lucide="folder-kanban" aria-hidden="true"></i>Projects</button>
-            <button class="section-tab" data-tab="labTimings" type="button"><i class="nav-glyph" data-lucide="calendar-days" aria-hidden="true"></i>Lab timings</button>
+            <button class="section-tab active" data-tab="overview" type="button" aria-current="page"><i class="nav-glyph" data-lucide="layout-dashboard" aria-hidden="true"></i><span class="section-tab-text"><span class="section-tab-full">Dashboard</span><span class="section-tab-short">Home</span></span></button>
+            <button class="section-tab" data-tab="partProposal" type="button"><i class="nav-glyph" data-lucide="package-plus" aria-hidden="true"></i><span class="section-tab-text"><span class="section-tab-full">Part requests</span><span class="section-tab-short">Requests</span></span></button>
+            <button class="section-tab" data-tab="borrowLogs" type="button"><i class="nav-glyph" data-lucide="clipboard-list" aria-hidden="true"></i><span class="section-tab-text"><span class="section-tab-full">Borrow logs</span><span class="section-tab-short">Loans</span></span></button>
+            <button class="section-tab" data-tab="projectProposal" type="button"><i class="nav-glyph" data-lucide="folder-kanban" aria-hidden="true"></i><span class="section-tab-text"><span class="section-tab-full">Projects</span><span class="section-tab-short">Projects</span></span></button>
+            <button class="section-tab" data-tab="labTimings" type="button"><i class="nav-glyph" data-lucide="calendar-days" aria-hidden="true"></i><span class="section-tab-text"><span class="section-tab-full">Lab timings</span><span class="section-tab-short">Timings</span></span></button>
 
             <!-- Pinned to the foot of the rail: nudge parts back on time -->
             <aside class="rail-reminder">
