@@ -741,7 +741,7 @@ function closeProposeModal() {
 }
 
 function statusLabel(status) {
-    return { pending: "Awaiting review", standby: "On standby", approved: "Approved", declined: "Declined" }[status] || status;
+    return { pending: "Awaiting review", standby: "On standby", approved: "Approved", declined: "Declined", expired: "Expired" }[status] || status;
 }
 
 function proposalAge(value) {
@@ -780,7 +780,7 @@ async function loadMyProposals() {
 
 /* ---------------- Borrow logs ---------------- */
 
-const borrowStatusLabel = proposal => proposal.returned_at ? "Returned" : proposal.lent_at ? "With you" : proposal.status === "approved" ? "Ready to collect" : statusLabel(proposal.status);
+const borrowStatusLabel = proposal => proposal.returned_at ? "Returned" : proposal.lent_at ? "With you" : proposal.status === "expired" ? "Never collected" : proposal.status === "approved" ? "Ready to collect" : statusLabel(proposal.status);
 
 function isBorrowOverdue(proposal) {
     if (!proposal.due_at || proposal.returned_at || !proposal.lent_at) return false;
@@ -815,6 +815,7 @@ async function loadBorrowLogs() {
 function borrowFilterStatus(proposal) {
     if (proposal.returned_at) return "returned";
     if (proposal.lent_at) return "active";
+    if (proposal.status === "expired") return "expired";
     if (proposal.status === "approved") return "approved";
     if (proposal.status === "declined") return "declined";
     return "pending";
@@ -890,6 +891,7 @@ function openReceipt(proposalId) {
     let notice = `<div class="receipt-notice">Awaiting review — this receipt becomes valid once approved.</div>`;
     if (isOut) notice = `<div class="receipt-notice live">The parts are with you. Return them before the due date.</div>`;
     else if (proposal.returned_at) notice = `<div class="receipt-notice done">Returned safely to the lab. Nothing left to do.</div>`;
+    else if (proposal.status === "expired") notice = `<div class="receipt-notice declined">This request expired before the parts were collected, so the receipt is no longer valid. Send a new proposal if you still need them.</div>`;
     else if (proposal.status === "approved") notice = `<div class="receipt-notice ready">Verified — show this receipt at the lab to collect the parts.</div>`;
     else if (proposal.status === "declined") notice = `<div class="receipt-notice declined">This request was declined, so this receipt is not valid.</div>`;
     document.getElementById("receiptBody").innerHTML = `
@@ -1883,7 +1885,7 @@ async function initialiseDashboard() {
     supabaseClient.channel("student-projects-feed")
         .on("postgres_changes", { event: "*", schema: "public", table: "project_proposals" }, () => { loadStudentProjects(); loadDeadlines(); })
         .on("postgres_changes", { event: "*", schema: "public", table: "project_interests" }, () => { loadStudentProjects(); loadDeadlines(); })
-        .on("postgres_changes", { event: "*", schema: "public", table: "sim_clock" }, async () => { await refreshSimClock(); renderDashboardDate(); loadDeadlines(); })
+        .on("postgres_changes", { event: "*", schema: "public", table: "sim_clock" }, async () => { await refreshSimClock(); renderDashboardDate(); loadDeadlines(); loadBorrowLogs(); })
         .subscribe();
 
     supabaseClient.channel("noise-feed")

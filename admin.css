@@ -70,6 +70,8 @@ a { color: inherit; text-decoration: none; }
 
 .admin-view { display: none; }
 .admin-view.active { display: block; animation: adminIn .25s ease both; }
+/* The clock tab stacks its panels directly, so it needs its own gap. */
+#clockView.active { display: grid; gap: 18px; align-content: start; }
 @keyframes adminIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .admin-panel { border: 1px solid var(--line); border-radius: 15px; background: var(--panel); overflow: hidden; }
@@ -104,15 +106,19 @@ a { color: inherit; text-decoration: none; }
 .inventory-row:last-child { border-bottom: 0; }
 .empty-admin { padding: 30px 12px; color: var(--muted); font-size: 10px; text-align: center; }
 .admin-note { margin: 0 0 15px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.sim-clock-ticker { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.sim-clock-ticker span { flex: 1 1 180px; display: grid; gap: 2px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; }
+.sim-clock-ticker small { color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.sim-clock-ticker strong { font-family: "DM Mono", monospace; font-size: 12px; font-weight: 700; }
+.sim-clock-ticker em { color: var(--muted); font-size: 9px; font-style: normal; }
 
-.invite-code-form { display: grid; gap: 10px; }
-.invite-code-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.invite-code-field { display: grid; gap: 6px; }
-.invite-code-field span { color: var(--muted); font-size: 9px; font-weight: 700; }
-.invite-code-field input { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 7px; outline: 0; background: var(--panel-soft); color: var(--ink); font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: .5px; }
-.invite-code-field input:focus { border-color: var(--mint); }
 .invite-code-actions { display: flex; align-items: center; gap: 8px; }
-.invite-code-stamp { margin: 10px 0 0; color: var(--muted); font-size: 9px; }
+.code-chip { padding: 2px 6px; border: 1px solid var(--line); border-radius: 5px; font-family: "DM Mono", monospace; font-size: 9px; }
+.invite-code-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.invite-code-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-soft); }
+.invite-code-row > span { color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.invite-code-value { font-family: "DM Mono", monospace; font-size: 12px; letter-spacing: 1px; user-select: all; }
+.invite-code-value.revealed { letter-spacing: .5px; color: var(--ink); }
 
 .auth-wrap { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
 .auth-panel { width: min(430px, 100%); padding: 34px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); box-shadow: 0 25px 80px rgba(0, 0, 0, .25); }
@@ -129,7 +135,7 @@ a { color: inherit; text-decoration: none; }
 .auth-error.ok { color: var(--mint); }
 
 @media (max-width: 850px) { .admin-shell { grid-template-columns: 190px minmax(0, 1fr); } .admin-main { padding: 24px; } .form-grid { grid-template-columns: 1fr 1fr; } .inventory-row { grid-template-columns: 1fr 1fr 70px; } .inventory-row span:nth-child(4) { display: none; } }
-@media (max-width: 650px) { .admin-shell { display: block; } .admin-sidebar { position: sticky; top: 0; z-index: 2; flex-direction: row; align-items: center; gap: 12px; padding: 11px 14px; border-right: 0; border-bottom: 1px solid var(--line); } .admin-sidebar .admin-brand small { display: none; } .admin-sidebar-footer { display: flex; align-items: center; gap: 10px; margin: 0; } .admin-sidebar-footer .admin-identity { display: none; } .admin-sidebar-footer #adminSignOut { white-space: nowrap; } .admin-brand { padding: 0; margin-right: auto; } .admin-nav { display: flex; overflow-x: auto; } .admin-nav button { white-space: nowrap; } .admin-main { padding: 20px 14px 35px; } .admin-topbar { margin-bottom: 28px; } .admin-heading { display: block; } .admin-badge { display: inline-block; margin-top: 15px; } .admin-grid, .stats { grid-template-columns: 1fr; } .admin-panel.wide { grid-column: auto; } .invite-code-fields { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .admin-shell { display: block; } .admin-sidebar { position: sticky; top: 0; z-index: 2; flex-direction: row; align-items: center; gap: 12px; padding: 11px 14px; border-right: 0; border-bottom: 1px solid var(--line); } .admin-sidebar .admin-brand small { display: none; } .admin-sidebar-footer { display: flex; align-items: center; gap: 10px; margin: 0; } .admin-sidebar-footer .admin-identity { display: none; } .admin-sidebar-footer #adminSignOut { white-space: nowrap; } .admin-brand { padding: 0; margin-right: auto; } .admin-nav { display: flex; overflow-x: auto; } .admin-nav button { white-space: nowrap; } .admin-main { padding: 20px 14px 35px; } .admin-topbar { margin-bottom: 28px; } .admin-heading { display: block; } .admin-badge { display: inline-block; margin-top: 15px; } .admin-grid, .stats { grid-template-columns: 1fr; } .admin-panel.wide { grid-column: auto; } }
 
 /* Wider registry fields */
 .form-grid { grid-template-columns: 1.5fr 1fr 80px 90px 1fr auto; }

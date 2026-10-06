@@ -128,7 +128,7 @@
                         <button id="logsDayAll" class="logs-allbtn" type="button">All days</button>
                     </div>
                     <label class="logs-search-field"><span>Search</span><input id="logsSearch" type="search" placeholder="Student, reason, or part..." aria-label="Search logbook"></label>
-                    <label class="logs-filter-field"><span>Filter</span><select id="logsFilter" aria-label="Filter logbook"><option value="all">All returns</option><option value="ontime">Returned on time</option><option value="late">Returned late</option></select></label>
+                    <label class="logs-filter-field"><span>Filter</span><select id="logsFilter" aria-label="Filter logbook"><option value="all">All entries</option><option value="ontime">Returned on time</option><option value="late">Returned late</option><option value="expired">Never collected</option></select></label>
                 </div>
                 <div class="logs-diary" id="logsDiary"></div>
             </section>
@@ -265,7 +265,7 @@
                 <div class="history-filter-panel" id="historyFilterPanel">
                     <label class="history-search-field"><span>Search</span><input id="historySearch" type="search" placeholder="Student, class, or request..." aria-label="Search request history"></label>
                     <div class="history-filter-grid">
-                        <label><span>Status</span><select id="historyStatus"><option value="all">All reviewed</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="standby">Standby</option></select></label>
+                        <label><span>Status</span><select id="historyStatus"><option value="all">All reviewed</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="standby">Standby</option><option value="expired">Expired</option></select></label>
                         <label><span>From</span><input id="historyDateFrom" type="date" aria-label="History from date"></label>
                         <label><span>To</span><input id="historyDateTo" type="date" aria-label="History to date"></label>
                     </div>

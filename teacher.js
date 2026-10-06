@@ -48,7 +48,7 @@ function formatTime(value) {
     return new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-const statusLabel = status => ({ pending: "Awaiting review", standby: "On standby", approved: "Approved", declined: "Declined" }[status] || status);
+const statusLabel = status => ({ pending: "Awaiting review", standby: "On standby", approved: "Approved", declined: "Declined", expired: "Expired" }[status] || status);
 
 let audioContext = null;
 function primeAudio() {
@@ -565,8 +565,68 @@ function timeLeftText(proposal) {
     return `${Math.floor(seconds / 86400)} days left`;
 }
 
+/* An approved request only becomes a real loan once the parts are physically
+   handed over, so while it waits in "Awaiting pickup" it has no due_at and can
+   sit on the desk forever if the student shifts clubs, changes section, or just
+   never shows up. The pickup window is therefore the loan length the student
+   asked for, counted from the moment the request was approved. Once that passes
+   the request is swept off the desk and booked into that day's logbook. */
+function collateralPickupDeadline(proposal) {
+    if (!proposal || proposal.lent_at || proposal.returned_at) return null;
+    const days = Number(proposal.duration_days);
+    if (!Number.isFinite(days) || days <= 0) return null;
+    const approvedAt = proposal.reviewed_at || proposal.created_at;
+    if (!approvedAt) return null;
+    const stamp = new Date(approvedAt);
+    if (Number.isNaN(stamp.getTime())) return null;
+    return new Date(stamp.getTime() + days * 86400000);
+}
+
+function isCollateralPickupPassed(proposal, now) {
+    const deadline = collateralPickupDeadline(proposal);
+    if (!deadline) return false;
+    return deadline.getTime() <= (now || effectiveTeacherNow()).getTime();
+}
+
+function collateralPickupCountdown(proposal) {
+    const deadline = collateralPickupDeadline(proposal);
+    if (!deadline) return "";
+    const ms = deadline.getTime() - effectiveTeacherNow().getTime();
+    if (ms <= 0) return "pickup deadline passed";
+    if (ms < 3600000) return `${Math.max(1, Math.floor(ms / 60000))} min to collect`;
+    if (ms < 86400000) return `${Math.floor(ms / 3600000)} hr to collect`;
+    const days = Math.floor(ms / 86400000);
+    return `${days} day${days === 1 ? "" : "s"} to collect`;
+}
+
+async function sweepExpiredPickups() {
+    const { data, error } = await supabaseClient
+        .from("part_proposals")
+        .select("id, status, duration_days, reviewed_at, created_at, lent_at, returned_at")
+        .in("status", ["approved", "expired"])
+        .is("lent_at", null)
+        .is("returned_at", null);
+    if (error) { console.error("Pickup sweep error:", error); return; }
+    const now = effectiveTeacherNow();
+    const stale = (data || []).filter(row => row.status !== "expired" && isCollateralPickupPassed(row, now));
+    if (!stale.length) return;
+    const { error: updateError } = await supabaseClient
+        .from("part_proposals")
+        .update({ status: "expired" })
+        .in("id", stale.map(row => row.id));
+    if (updateError) {
+        /* A status CHECK constraint may reject "expired". isCollateralAwaiting
+           still hides the row from the desk, so the sweep is not lost — it just
+           does not survive a reload until the constraint allows the value. */
+        console.warn("Pickup sweep write blocked, hiding locally instead:", updateError.message);
+        return;
+    }
+    showToast(`${stale.length} pickup request${stale.length === 1 ? "" : "s"} passed the deadline — logged in the logbook`);
+}
+
 async function loadCollateral() {
     await syncOverdueState();
+    await sweepExpiredPickups();
     const { data, error } = await supabaseClient
         .from("part_proposals")
         .select("id, student_id, student_name, student_class_name, student_section, reason, duration_days, items, status, lent_at, due_at, returned_at, photo_url, photo_path, return_note, reviewed_at, created_at")
@@ -598,7 +658,7 @@ function collateralMatchesSearch(proposal, search) {
     return [proposal.student_name, proposal.student_class_name, proposal.student_section, proposal.reason, itemNames].join(" ").toLowerCase().includes(search);
 }
 
-const isCollateralAwaiting = proposal => !proposal.lent_at;
+const isCollateralAwaiting = proposal => !proposal.lent_at && !proposal.returned_at && !isCollateralPickupPassed(proposal);
 const isCollateralOut = proposal => proposal.lent_at && !proposal.returned_at;
 const isCollateralReturned = proposal => proposal.returned_at;
 const isCollateralOverdue = proposal => isCollateralOut(proposal) && proposal.due_at && new Date(proposal.due_at) <= effectiveTeacherNow();
@@ -633,7 +693,9 @@ function renderCollateralSection(targetId, items, kind) {
     container.innerHTML = items.map(proposal => {
         const overdue = kind === "out" && isCollateralOverdue(proposal);
         const badge = kind === "awaiting" ? { text: "Ready to collect", cls: "approved" } : kind === "out" ? (overdue ? { text: "Overdue", cls: "overdue" } : { text: "On loan", cls: "out" }) : { text: "Returned", cls: "returned" };
-        const timing = kind === "awaiting" ? `Approved ${formatTime(proposal.reviewed_at || proposal.created_at)}` : kind === "out" ? `Out ${formatTime(proposal.lent_at)} · ${timeLeftText(proposal)}` : `Returned ${formatTime(proposal.returned_at)}`;
+        const pickupWindow = kind === "awaiting" ? collateralPickupCountdown(proposal) : "";
+        const pickupDeadline = kind === "awaiting" ? collateralPickupDeadline(proposal) : null;
+        const timing = kind === "awaiting" ? `Approved ${formatTime(proposal.reviewed_at || proposal.created_at)}${pickupWindow ? ` · ${pickupWindow}` : ""}` : kind === "out" ? `Out ${formatTime(proposal.lent_at)} · ${timeLeftText(proposal)}` : `Returned ${formatTime(proposal.returned_at)}`;
         const action = kind === "awaiting"
             ? `<button class="review-button approve" data-lend="start" type="button">Proceed with lending →</button>`
             : kind === "out"
@@ -641,6 +703,7 @@ function renderCollateralSection(targetId, items, kind) {
                 : "";
         const itemsCount = collateralItemCount(proposal);
         const dueSnippet = proposal.due_at ? ` · due ${new Date(proposal.due_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "";
+        const collectSnippet = pickupDeadline ? ` · collect by ${pickupDeadline.toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "";
         return `
         <article class="collateral-card ${overdue ? "overdue" : ""}" data-proposal-id="${escapeHtml(proposal.id)}" data-status="${escapeHtml(proposal.status)}">
             <div class="collateral-card-top">
@@ -649,7 +712,7 @@ function renderCollateralSection(targetId, items, kind) {
                 <span class="collateral-badge ${badge.cls}">${badge.text}</span>
             </div>
             <div class="collateral-card-foot">
-                <span class="collateral-meta">${itemsCount} item${itemsCount === 1 ? "" : "s"} · ${proposal.duration_days} day${proposal.duration_days === 1 ? "" : "s"}${kind === "out" ? dueSnippet : ""}</span>
+                <span class="collateral-meta">${itemsCount} item${itemsCount === 1 ? "" : "s"} · ${proposal.duration_days} day${proposal.duration_days === 1 ? "" : "s"}${kind === "out" ? dueSnippet : collectSnippet}</span>
                 <div class="collateral-card-foot-actions">
                     ${action ? `<span class="collateral-action">${action}</span>` : ""}
                     <span class="collateral-expand"><i aria-hidden="true"></i>details</span>
@@ -789,18 +852,22 @@ function formatDay(value) {
 }
 
 async function loadLogs() {
-    const { data, error } = await supabaseClient
-        .from("part_proposals")
-        .select("id, student_id, student_name, student_class_name, student_section, reason, duration_days, items, reviewed_at, created_at, lent_at, due_at, returned_at")
-        .not("returned_at", "is", null)
-        .order("returned_at", { ascending: false });
+    const fields = "id, student_id, student_name, student_class_name, student_section, reason, duration_days, items, status, reviewed_at, created_at, lent_at, due_at, returned_at";
+    const [returnedResult, missedResult] = await Promise.all([
+        supabaseClient.from("part_proposals").select(fields).not("returned_at", "is", null).order("returned_at", { ascending: false }),
+        supabaseClient.from("part_proposals").select(fields).in("status", ["approved", "expired"]).is("lent_at", null).is("returned_at", null)
+    ]);
     const diary = document.getElementById("logsDiary");
-    if (error) {
+    if (returnedResult.error) {
         diary.innerHTML = `<div class="empty-state empty-state-error"><strong>Logs unavailable</strong><p>Run the admin SQL migration first.</p></div>`;
-        console.error("Log load error:", error);
+        console.error("Log load error:", returnedResult.error);
         return;
     }
-    logRows = data || [];
+    if (missedResult.error) console.error("Missed pickup load error:", missedResult.error);
+    const missed = (missedResult.data || [])
+        .filter(row => isCollateralPickupPassed(row))
+        .map(row => ({ ...row, expired: true, event_at: collateralPickupDeadline(row).toISOString() }));
+    logRows = (returnedResult.data || []).map(row => ({ ...row, expired: false, event_at: row.returned_at })).concat(missed);
     const ids = [...new Set(logRows.map(row => row.student_id).filter(Boolean))];
     if (ids.length) {
         const { data: profiles } = await supabaseClient.from("student_profiles").select("user_id, name, email").in("user_id", ids);
@@ -824,7 +891,8 @@ function addDaysTo(value, days) {
 
 function renderLogs() {
     const diary = document.getElementById("logsDiary");
-    setHeaderStat("logs", logRows.length, "returned");
+    const returnedCount = logRows.filter(row => !row.expired).length;
+    setHeaderStat("logs", returnedCount, "returned");
     const search = (document.getElementById("logsSearch").value || "").trim().toLowerCase();
     const filter = document.getElementById("logsFilter").value;
     const picker = document.getElementById("logsDayPicker");
@@ -833,13 +901,15 @@ function renderLogs() {
     const matched = logRows.map(row => ({
         ...row,
         profile: profileMap[row.student_id] || {},
-        keptDays: row.lent_at ? Math.max(0, Math.round((new Date(row.returned_at) - new Date(row.lent_at)) / 86400000)) : 0,
-        late: row.due_at && new Date(row.returned_at) > new Date(row.due_at)
+        keptDays: !row.expired && row.lent_at ? Math.max(0, Math.round((new Date(row.returned_at) - new Date(row.lent_at)) / 86400000)) : 0,
+        late: !row.expired && !!row.due_at && new Date(row.returned_at) > new Date(row.due_at)
     })).filter(row => {
         const names = [row.student_name, row.profile.name, row.profile.email].filter(Boolean).join(" ");
         const items = (Array.isArray(row.items) ? row.items : []).map(item => item.name).join(" ");
         const hay = [names, row.student_class_name, row.student_section, row.reason, items].join(" ").toLowerCase();
         if (search && !hay.includes(search)) return false;
+        if (row.expired) return filter === "all" || filter === "expired";
+        if (filter === "expired") return false;
         if (filter === "ontime" && row.late) return false;
         if (filter === "late" && !row.late) return false;
         return true;
@@ -847,10 +917,10 @@ function renderLogs() {
 
     const byDay = {};
     matched.forEach(row => {
-        const key = localDayKey(row.returned_at);
+        const key = localDayKey(row.event_at);
         (byDay[key] = byDay[key] || []).push(row);
     });
-    Object.values(byDay).forEach(entries => entries.sort((a, b) => new Date(a.returned_at) - new Date(b.returned_at)));
+    Object.values(byDay).forEach(entries => entries.sort((a, b) => new Date(a.event_at) - new Date(b.event_at)));
 
     const todayKey = localDayKey(effectiveTeacherNow());
     const filtering = search || filter !== "all";
@@ -896,8 +966,13 @@ function renderDiaryDay(key, entries, isToday) {
     const date = new Date(`${key}T00:00:00`);
     const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
     const monthYear = date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-    const ontime = entries.filter(entry => !entry.late).length;
-    const summary = !entries.length ? "no returns" : `${entries.length} return${entries.length === 1 ? "" : "s"}${ontime === entries.length ? " · all on time" : ` · ${ontime} on time · ${entries.length - ontime} late`}`;
+    const returned = entries.filter(entry => !entry.expired);
+    const missed = entries.length - returned.length;
+    const ontime = returned.filter(entry => !entry.late).length;
+    const notes = [];
+    if (returned.length) notes.push(`${returned.length} return${returned.length === 1 ? "" : "s"}${ontime === returned.length ? " · all on time" : ` · ${ontime} on time · ${returned.length - ontime} late`}`);
+    if (missed) notes.push(`${missed} never collected`);
+    const summary = notes.length ? notes.join(" · ") : "no activity";
     return `
         <section class="diary-day ${isToday ? "today" : ""}" data-day="${key}">
             <header class="diary-day-head">
@@ -921,7 +996,24 @@ function renderDiaryEntry(row) {
     const name = row.profile.name || row.student_name || "Unknown student";
     const email = row.profile.email || "";
     const initials = name.split(" ").filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
-    const returnedTime = new Date(row.returned_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    const returnedTime = new Date(row.event_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    if (row.expired) {
+        return `
+        <li class="diary-entry expired">
+            <span class="diary-avatar" aria-hidden="true">${escapeHtml(initials)}</span>
+            <div class="diary-entry-main">
+                <strong>${escapeHtml(name)}${email ? `<span class="diary-email"> · ${escapeHtml(email)}</span>` : ""}</strong>
+                <small>${escapeHtml(studentClassSection(row))} · approved for a ${row.duration_days}-day loan · pickup window closed</small>
+                <p>${escapeHtml(row.reason)}</p>
+                <div class="proposal-items">${collateralChipList(row.items) || `<span class="part-chip">No items listed</span>`}</div>
+            </div>
+            <div class="diary-entry-side">
+                <span class="diary-badge expired">Never collected</span>
+                <small>Deadline passed ${escapeHtml(returnedTime)}</small>
+                <small>Requested ${escapeHtml(formatDateTime(row.created_at))}</small>
+            </div>
+        </li>`;
+    }
     return `
         <li class="diary-entry ${row.late ? "late" : ""}">
             <span class="diary-avatar" aria-hidden="true">${escapeHtml(initials)}</span>
@@ -1988,7 +2080,12 @@ async function initialiseTeacher() {
 
     supabaseClient.channel("teacher-notice-feed")
         .on("postgres_changes", { event: "*", schema: "public", table: "notices" }, loadNoticeData)
-        .on("postgres_changes", { event: "*", schema: "public", table: "sim_clock" }, () => { refreshTeacherSimClock(); loadProposals(); })
+        .on("postgres_changes", { event: "*", schema: "public", table: "sim_clock" }, async () => {
+            await refreshTeacherSimClock();
+            /* Disabling the test clock hands the real date back, which can push
+               a fresh batch of pickup requests past their deadline. */
+            await Promise.all([loadProposals(), loadCollateral(), loadLogs()]);
+        })
         .subscribe();
 }
 

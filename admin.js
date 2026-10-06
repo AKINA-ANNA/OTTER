@@ -1,18 +1,34 @@
 // ============================================================
-// ALE's AI runs through a Supabase Edge Function (ale-chat) so the
-// OpenRouter API key never lives in this file. It powers
+// ALE's AI runs through a Supabase Edge Function (supabase/functions/ale-chat)
+// so the OpenRouter API key never lives in this file. It powers
 // "Organize with AI", the per-part AI usage notes, the restock
 // refinement, and the ALE chat.
 //
-// Deploy once:
+// Chats are temporary: the conversation lives in memory for the
+// session and nothing is written to a database.
+//
+// The browser talks to it via ale-api.js (window.AleApi). Auth reuses the
+// Supabase session, and the function re-checks is_admin() on every call.
+// Deploy the function:
+//   supabase secrets set OPENROUTER_KEY=<key>
 //   supabase functions deploy ale-chat
-//   supabase secrets set OPENROUTER_API_KEY=sk-or-v1-...
 // ============================================================
 const OPENROUTER_MODEL = "openai/gpt-4o-mini";
+
+/* Lazy handle to the edge-function glue. Guarded so a missing script degrades
+   to a console error at the call site instead of a ReferenceError that kills
+   the rest of this file. */
+function aleApi() {
+    if (!window.AleApi) throw new Error("ALE backend not loaded (ale-api.js missing?)");
+    return window.AleApi;
+}
 
 const SUPABASE_URL = "https://xwawghxsebspjonkxafm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3YXdnaHhzZWJzcGpvbmt4YWZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NzE4MDEsImV4cCI6MjEwMzA0NzgwMX0.Qht29UsrW-XXUkXDEqJvw00AHKdnjswNPwRHg78vIz4";
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* Hand the session to the chat proxy. A missing script is not fatal here —
+   every ALE call site catches and reports it. */
+try { window.AleApi?.init(supabaseClient); } catch (error) { console.error("ALE backend failed to load:", error); }
 const randomId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -37,7 +53,9 @@ const ROOT = null;
 const ALL_PARTS = "__all__";
 let explorerFolder = ROOT;
 
-// ALE chat state
+// ALE chat state — one in-memory conversation in the side panel.
+// Nothing here is persisted: closing the panel keeps the thread, but the
+// history only lives as long as this page does.
 let aleHistory = [];
 let aleBusy = false;
 let aleAbortController = null;
@@ -358,7 +376,7 @@ function openPartDetail(part) {
             openPartDetail(part);
         } catch (error) {
             console.error(error);
-            toast("AI could not describe this part — check your OpenRouter key");
+            toast(error.message === "rate-limited" ? "OpenRouter is rate-limited — try again in a moment" : "AI could not describe this part — check your OpenRouter key");
             button.disabled = false;
             button.textContent = "Ask AI what it's for";
         }
@@ -436,34 +454,39 @@ function waitForAleRetry(waitMs, signal) {
 }
 
 async function openRouterRequest(messages, extra = {}, onStatus = null, signal = null) {
-    const token = (await supabaseClient.auth.getSession()).data.session?.access_token;
     throwIfAleAborted(signal);
-    if (!token) throw new Error("not-signed-in");
     const attempts = 4;
     for (let attempt = 0; attempt < attempts; attempt++) {
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/ale-chat`, {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: OPENROUTER_MODEL, messages, temperature: 0.3, ...extra }),
-            signal: signal || undefined
-        });
-        if (response.ok) {
-            const payload = await response.json();
-            const message = payload.message;
-            if (!message) throw new Error("Empty AI response");
-            return message;
+        throwIfAleAborted(signal);
+        let payload;
+        try {
+            /* The Edge Function holds the OpenRouter key and makes the call
+               server-side, so nothing about the key or the transport lives in
+               this file. */
+            payload = await aleApi().chat({
+                model: OPENROUTER_MODEL,
+                messages,
+                temperature: 0.3,
+                tools: extra.tools,
+                toolChoice: extra.tool_choice
+            }, signal);
+        } catch (error) {
+            if (error.name === "AbortError") throw error;
+            const reason = aleApi().reason(error);
+            /* Transport-class failures (rate-limited, upstream-unavailable)
+               are worth the backoff; anything else is surfaced verbatim. */
+            const retryable = reason === "rate-limited" || reason === "upstream-unavailable";
+            if (!retryable || attempt === attempts - 1) throw new Error(reason);
+            const waitMs = 1400 * (attempt + 1);
+            if (onStatus) onStatus(waitMs);
+            await waitForAleRetry(waitMs, signal);
+            continue;
         }
-        const retryable = response.status === 429 || response.status >= 500;
-        if (!retryable || attempt === attempts - 1) {
-            if (response.status === 429) throw new Error("rate-limited");
-            throw new Error(`OpenRouter ${response.status}`);
-        }
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1400 * (attempt + 1);
-        if (onStatus) onStatus(waitMs);
-        await waitForAleRetry(waitMs, signal);
+        const message = payload.message;
+        if (!message) throw new Error("Empty AI response");
+        return message;
     }
-    throw new Error("OpenRouter unavailable");
+    throw new Error("upstream-unavailable");
 }
 
 async function callOpenRouter(messages) {
@@ -634,17 +657,43 @@ function findPart(reference) {
 
 async function fetchBorrowRows() {
     const { data, error } = await supabaseClient.from("part_proposals")
-        .select("id, student_name, student_class_name, student_section, reason, duration_days, items, status, lent_at, due_at, returned_at, created_at")
+        .select("id, student_name, student_class_name, student_section, reason, duration_days, items, status, lent_at, due_at, returned_at, reviewed_at, created_at")
         .order("created_at", { ascending: false })
         .limit(400);
     if (error) throw error;
     return data || [];
 }
 
+/* A pickup deadline exists only while an approved request has not been
+   collected: duration_days counted from the review, falling back to creation.
+   Mirrors teacher.js so both views agree on when a request went stale. */
+function borrowPickupDeadline(row) {
+    if (!row || row.lent_at || row.returned_at) return null;
+    /* Only approved requests have something to collect, so a request still
+       sitting in review has no deadline however old it is. This mirrors the
+       sweep in teacher.js, which only touches approved/expired rows. */
+    if (row.status !== "approved" && row.status !== "expired") return null;
+    const days = Number(row.duration_days);
+    if (!Number.isFinite(days) || days <= 0) return null;
+    const approvedAt = row.reviewed_at || row.created_at;
+    if (!approvedAt) return null;
+    const stamp = new Date(approvedAt);
+    if (Number.isNaN(stamp.getTime())) return null;
+    return new Date(stamp.getTime() + days * 86400000);
+}
+
 function borrowState(row, now) {
     if (row.returned_at) return "returned";
-    if (row.due_at && new Date(row.due_at) < now) return "overdue";
-    if (row.lent_at) return "out";
+    if (row.lent_at) {
+        if (row.due_at && new Date(row.due_at) < now) return "overdue";
+        return "out";
+    }
+    /* Never handed over. Derive the state rather than trusting status, because
+       the sweep in teacher.js writes "expired" but a CHECK constraint on
+       part_proposals.status can refuse that value and leave it "approved".
+       Deriving here keeps the log correct either way. */
+    const deadline = borrowPickupDeadline(row);
+    if (deadline && deadline.getTime() <= now.getTime()) return "expired";
     return row.status || "pending";
 }
 
@@ -686,7 +735,9 @@ async function runGetBorrows(args) {
             const matches = target ? item.id === target.id : (!needle || (item.name || "").toLowerCase().includes(needle));
             if (!matches) return;
             const state = borrowState(row, now);
-            if (args.active_only && (state === "returned" || state === "pending")) return;
+            /* "Active" has to mean the part actually left the store. A request
+               that was approved but never collected is not out with anyone. */
+            if (args.active_only && (!row.lent_at || state === "returned")) return;
             records.push({
                 part: item.name, part_id: item.id, quantity: item.quantity,
                 student: row.student_name, class: row.student_class_name || "", section: row.student_section || "",
@@ -1132,7 +1183,22 @@ async function loadSimClock() {
         ? `<strong class="live-sim">Test clock ACTIVE</strong> — consoles treat <strong>${escapeHtml(new Date(clock.simulated_at).toLocaleString(undefined, { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</strong> as today${clock.label ? ` (${escapeHtml(clock.label)})` : ""}<br><small>set by ${escapeHtml(clock.set_by_name || "an admin")} · ${escapeHtml(new Date(clock.updated_at).toLocaleString())}</small>`
         : `<em>No test clock active — both consoles run against the real calendar.</em>`;
     if (clearBtn) clearBtn.hidden = !clockActive;
+    renderSimClockTicker();
 }
+
+/* Two readouts so it is obvious which clock the dashboards are using: the
+   effective "today" the consoles see, and the real wall clock. With the test
+   clock on, the first stands still while the second keeps ticking. */
+function renderSimClockTicker() {
+    const ticker = document.getElementById("simClockTicker");
+    if (!ticker) return;
+    const stamp = date => date.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    ticker.innerHTML = simClockNow
+        ? `<span><small>Consoles see</small><strong>${escapeHtml(stamp(simClockNow))}</strong><em>held still</em></span><span><small>Real time</small><strong>${escapeHtml(stamp(new Date()))}</strong><em>advancing</em></span>`
+        : `<span><small>Both consoles</small><strong>${escapeHtml(stamp(new Date()))}</strong><em>advancing normally</em></span>`;
+}
+
+setInterval(renderSimClockTicker, 1000);
 async function setSimClockFromForm(form) {
     const value = document.getElementById("simClockAt").value;
     const label = document.getElementById("simClockLabel").value.trim();
@@ -1146,9 +1212,12 @@ async function setSimClockFromForm(form) {
 }
 document.getElementById("simClockSetForm").addEventListener("submit", event => { event.preventDefault(); setSimClockFromForm(event.target); });
 document.getElementById("simClockClear").addEventListener("click", async () => {
+    const button = document.getElementById("simClockClear");
+    button.disabled = true;
     const { error } = await supabaseClient.rpc("clear_sim_clock");
-    if (error) toast("Could not clear the test clock");
-    else { toast("Test clock cleared"); await loadSimClock(); }
+    button.disabled = false;
+    if (error) toast("Could not disable the test clock");
+    else { toast("Test clock disabled — both dashboards are back on the real clock"); await loadSimClock(); }
 });
 async function setSimPreset(days) {
     const now = new Date();
@@ -1161,43 +1230,37 @@ async function setSimPreset(days) {
 }
 document.querySelectorAll("[data-sim-preset]").forEach(button => button.addEventListener("click", () => setSimPreset(Number(button.dataset.simPreset))));
 
+let inviteCodesVisible = false;
+let inviteCodeMap = {};
+
+function maskInviteCode(code) {
+    const text = String(code ?? "");
+    if (!text) return "—";
+    return inviteCodesVisible ? text : "•".repeat(Math.min(10, Math.max(6, text.length)));
+}
+
+function renderInviteCodes() {
+    const list = document.getElementById("inviteCodeList");
+    if (!list) return;
+    const rows = [{ key: "admin", label: "Admin invite code" }, { key: "teacher", label: "Teacher invite code" }];
+    list.innerHTML = rows.map(row => `
+        <div class="invite-code-row">
+            <span>${escapeHtml(row.label)}</span>
+            <strong class="invite-code-value${inviteCodesVisible ? " revealed" : ""}">${escapeHtml(maskInviteCode(inviteCodeMap[row.key]))}</strong>
+        </div>`).join("");
+}
+
 async function loadInviteCodes() {
     const { data: rows, error } = await supabaseClient.rpc("get_invite_codes");
     if (error) { toast("Could not load the invite codes"); return; }
-    const map = {};
-    (rows || []).forEach(row => { map[row.role_name] = row.code; });
-    const adminInput = document.getElementById("adminInviteCode");
-    const teacherInput = document.getElementById("teacherInviteCode");
-    if (adminInput && map.admin !== undefined) adminInput.value = map.admin;
-    if (teacherInput && map.teacher !== undefined) teacherInput.value = map.teacher;
+    inviteCodeMap = {};
+    (rows || []).forEach(row => { inviteCodeMap[row.role_name] = row.code; });
+    renderInviteCodes();
 }
-async function saveInviteCodes() {
-    const adminCode = document.getElementById("adminInviteCode").value.trim();
-    const teacherCode = document.getElementById("teacherInviteCode").value.trim();
-    if (adminCode.length < 4) { toast("Admin invite code needs at least 4 characters"); return; }
-    if (teacherCode.length < 4) { toast("Teacher invite code needs at least 4 characters"); return; }
-    const button = document.querySelector("#inviteCodeForm button[type=submit]");
-    const original = button ? button.textContent : "";
-    if (button) { button.disabled = true; button.textContent = "Saving…"; }
-    try {
-        let { error } = await supabaseClient.rpc("set_invite_code", { p_role: "admin", p_code: adminCode });
-        if (error) throw error;
-        ({ error } = await supabaseClient.rpc("set_invite_code", { p_role: "teacher", p_code: teacherCode }));
-        if (error) throw error;
-        const stamp = document.getElementById("inviteCodeStamp");
-        if (stamp) { stamp.textContent = "Saved — the new codes are already live for the next signup."; stamp.hidden = false; }
-        toast("Invite codes updated");
-    } catch (error) {
-        toast(error.message ? String(error.message).replace(/^[^:]+:\s*/, "") : "Could not save the invite codes");
-    } finally {
-        if (button) { button.disabled = false; button.textContent = original; }
-    }
-}
-document.getElementById("inviteCodeForm").addEventListener("submit", event => { event.preventDefault(); saveInviteCodes(); });
 document.getElementById("inviteCodeToggle").addEventListener("click", () => {
-    const show = document.getElementById("inviteCodeToggle").textContent.includes("Show");
-    ["adminInviteCode", "teacherInviteCode"].forEach(id => { const input = document.getElementById(id); if (input) input.type = show ? "text" : "password"; });
-    document.getElementById("inviteCodeToggle").textContent = show ? "Hide codes" : "Show codes";
+    inviteCodesVisible = !inviteCodesVisible;
+    document.getElementById("inviteCodeToggle").textContent = inviteCodesVisible ? "Hide codes" : "Show codes";
+    renderInviteCodes();
 });
 
 // ============================================================
@@ -1215,7 +1278,7 @@ const formatStamp = value => value ? new Date(value).toLocaleString(undefined, {
 
 async function loadPartsLog() {
     const { data, error } = await supabaseClient.from("part_proposals")
-        .select("id, student_name, student_class_name, student_section, reason, duration_days, items, status, lent_at, due_at, returned_at, created_at")
+        .select("id, student_name, student_class_name, student_section, reason, duration_days, items, status, lent_at, due_at, returned_at, reviewed_at, created_at")
         .order("lent_at", { ascending: false });
     if (error) { console.error("Parts log load error:", error); return false; }
     borrowLogRows = data || [];
@@ -1254,6 +1317,8 @@ function buildPartsLogEntries() {
 }
 
 function partsLogStats(entries) {
+    /* The log only holds rows that were actually handed over, so anything that
+       is not returned is genuinely in someone's hands. */
     const active = entries.filter(entry => entry.state !== "returned");
     const overdue = entries.filter(entry => entry.state === "overdue");
     const returned = entries.filter(entry => entry.state === "returned");
@@ -1301,10 +1366,17 @@ function renderPartsLog() {
     listEl.innerHTML = `
         <div class="plog-head"><span>Part / code</span><span>Qty</span><span>State</span><span>Borrower / class</span><span>Lent</span><span>Due</span><span>Reason</span></div>
         ${filtered.map(entry => {
+            /* Every state needs its own chip. A catch-all "else = Returned" here
+               mislabelled approved-but-never-collected requests as returned. */
             const stateChip = entry.state === "overdue" ? `<span class="tier-pill tier-critical">Overdue</span>`
                 : entry.state === "out" ? `<span class="tier-pill tier-order">Out</span>`
-                : `<span class="tier-pill tier-none">Returned</span>`;
-            return `<div class="plog-row${entry.state === "overdue" ? " overdue-row" : ""}" data-part-id="${escapeHtml(entry.partId)}" role="button" tabindex="0" title="View ${escapeHtml(entry.name)} in the registry">
+                : entry.state === "expired" ? `<span class="tier-pill tier-critical">Never collected</span>`
+                : entry.state === "approved" ? `<span class="tier-pill tier-order">To hand out</span>`
+                : entry.state === "standby" ? `<span class="tier-pill tier-none">On standby</span>`
+                : entry.state === "declined" ? `<span class="tier-pill tier-none">Declined</span>`
+                : entry.state === "returned" ? `<span class="tier-pill tier-none">Returned</span>`
+                : `<span class="tier-pill tier-none">Pending</span>`;
+            return `<div class="plog-row${entry.state === "overdue" || entry.state === "expired" ? " overdue-row" : ""}" data-part-id="${escapeHtml(entry.partId)}" role="button" tabindex="0" title="View ${escapeHtml(entry.name)} in the registry">
                 <div class="plog-part"><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.code)}</small></div>
                 <span class="qty-num">× ${entry.qty}</span>
                 ${stateChip}
@@ -1598,7 +1670,8 @@ async function askAIRestock() {
         toast("ALE refined the order — review the receipt");
     } catch (error) {
         console.error(error);
-        toast(error.message === "rate-limited" ? "OpenRouter is rate-limited — try again in a moment" : "AI refine failed — the algorithm plan still stands");
+        if (error.message === "rate-limited") toast("OpenRouter is rate-limited — try again in a moment");
+        else toast("AI refine failed — the algorithm plan still stands");
     } finally {
         button.disabled = false;
         button.textContent = "✦ Ask AI to refine";

@@ -27,7 +27,7 @@ The browser apps use Supabase Auth, Postgres tables and RPC functions, and realt
 
 The anon key is intended for browser use, but access must be secured with Supabase Row Level Security and appropriate policies. Never put a service-role key or other private secret in client-side code.
 
-ALE calls the Supabase Edge Function `ale-chat`. Deploy the function and configure its `OPENROUTER_API_KEY` secret in Supabase before using ALE. The admin console also uses the `is_admin` role check and invite-code RPCs; teacher access uses `is_teacher`.
+ALE (the admin AI) runs on a Supabase Edge Function, not in the browser: `supabase/functions/ale-chat` holds the OpenRouter key, re-checks `is_admin()` with the caller's own token on every request, and forwards the chat — so the key never reaches the page. The console talks to it through `ale-api.js` (`window.AleApi`) using the existing Supabase session, and `admin.js` sends nothing but the prompt. Deploy it with `supabase secrets set OPENROUTER_KEY=<key>` then `supabase functions deploy ale-chat`. Conversations are temporary and live in the console for the session — nothing about them is stored. Supabase still provides auth, the `is_admin` role check and invite-code RPCs; teacher access uses `is_teacher`.
 
 ### Email confirmation
 
@@ -92,11 +92,13 @@ The code is verified by Supabase before `delete_my_account()` is called, so the 
 | `otter3d.js`, `three.min.js` | Signup otter scene and Three.js runtime |
 | `loading-screen.js`, `loading-screen.css` | Shared workspace loading screen |
 | `tutorial.js`, `tutorial-content.js`, `tutorial.css` | Guided workspace tours |
+| `ale-api.js` | Chat proxy glue for the admin AI (`window.AleApi`) |
+| `supabase/functions/ale-chat/index.ts` | Edge Function: admin check + OpenRouter proxy |
 
 ## Notes
 
 - Supabase JS, Google Fonts, and the student dashboard’s Lucide icons are loaded from CDNs, so those features need an internet connection.
-- The admin AI uses the configured Edge Function; the OpenRouter key should only be stored as a Supabase function secret.
+- The admin AI runs on the project's Supabase Edge Functions; the OpenRouter key should only be stored as an Edge Function secret (`supabase secrets set OPENROUTER_KEY=...`), never in client code.
 - The client pages contain no build or test scripts. Validate JavaScript changes with `node --check <file.js>` and test the role-specific flows against a configured Supabase project.
 - You might have noticed the test clock feature or the admin secret invite codes I would ask to not abuse the invite codes   as it might cause chaos with numerous differing invite codes and the test clock is a temporary feature in this tester version and will be removed later.
 

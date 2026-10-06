@@ -6,7 +6,7 @@
     <link rel="icon" type="image/png" href="favicon-admin.png?v=3">
     <link rel="shortcut icon" href="favicon-admin.ico?v=3">
     <title>Otter — Admin console</title>
-    <link rel="stylesheet" href="admin.css?v=27">
+    <link rel="stylesheet" href="admin.css?v=28">
     <link rel="stylesheet" href="loading-screen.css?v=3">
     <link rel="stylesheet" href="tutorial.css?v=2">
     <link rel="stylesheet" href="account-deletion.css?v=1">
@@ -104,9 +104,9 @@
             </section>
 
             <section class="admin-view" id="clockView">
-                <section class="admin-panel"><div class="panel-head"><h2>Test clock</h2><small>Simulated "today" — test overdue notices without waiting for real time</small></div><div class="panel-body"><p class="admin-note">Set a simulated date and both the student dashboard and the teacher console treat it as "<strong>today</strong>". The overdue engine and due-date notices run against this simulated date instead of the real calendar until you clear it. A banner shows on every console while it is active.</p><form class="form-grid" id="simClockSetForm"><input id="simClockAt" type="datetime-local" required><input id="simClockLabel" placeholder="Label (e.g. testing overdue at 8 days)" maxlength="120"><span></span><button class="action-button" type="submit">Set test date</button></form><div class="sim-clock-current" id="simClockCurrent"></div><div class="sim-clock-presets"><span>Jump to:</span><button class="quiet-button" data-sim-preset="8" type="button">+8 days (overdue)</button><button class="quiet-button" data-sim-preset="15" type="button">+15 days (long overdue)</button></div><button class="quiet-button" id="simClockClear" type="button" hidden>Clear test clock (back to real)</button></div></section>
+                <section class="admin-panel"><div class="panel-head"><h2>Test clock</h2><small>Simulated "today" — test overdue notices without waiting for real time</small></div><div class="panel-body"><p class="admin-note">Set a simulated date and both the student dashboard and the teacher console treat it as "<strong>today</strong>". The overdue engine and due-date notices run against this simulated date instead of the real calendar. While it is set the clock is held still, so countdowns on both dashboards stop moving. Use <strong>Disable test clock</strong> to hand the real date and time straight back to both dashboards.</p><form class="form-grid" id="simClockSetForm"><input id="simClockAt" type="datetime-local" required><input id="simClockLabel" placeholder="Label (e.g. testing overdue at 8 days)" maxlength="120"><span></span><button class="action-button" type="submit">Set test date</button></form><div class="sim-clock-current" id="simClockCurrent"></div><div class="sim-clock-ticker" id="simClockTicker"></div><div class="sim-clock-presets"><span>Jump to:</span><button class="quiet-button" data-sim-preset="8" type="button">+8 days (overdue)</button><button class="quiet-button" data-sim-preset="15" type="button">+15 days (long overdue)</button></div><button class="danger-button" id="simClockClear" type="button" hidden>Disable test clock — back to real time</button></div></section>
 
-                <section class="admin-panel"><div class="panel-head"><h2>Invite codes</h2><small>View and change the private signup codes for admins and teachers</small></div><div class="panel-body"><p class="admin-note">These are the private codes new admins and teachers must type on their signup page. Changing one takes effect immediately for the next signup. Keep them secret and at least 4 characters.</p><form class="invite-code-form" id="inviteCodeForm"><div class="invite-code-fields"><label class="invite-code-field"><span>Admin invite code</span><input id="adminInviteCode" type="password" maxlength="60" autocomplete="off"></label><label class="invite-code-field"><span>Teacher invite code</span><input id="teacherInviteCode" type="password" maxlength="60" autocomplete="off"></label></div><div class="invite-code-actions"><button class="quiet-button" id="inviteCodeToggle" type="button">Show codes</button><button class="action-button" type="submit">Save changes</button></div></form><p class="invite-code-stamp" id="inviteCodeStamp" hidden></p></div></section>
+                <section class="admin-panel"><div class="panel-head"><h2>Invite codes</h2><small>Read-only view of the private signup codes</small></div><div class="panel-body"><p class="admin-note">These are the private codes new admins and teachers must type on their signup page. This panel can only read them — to change one, update <span class="code-chip">invite_codes</span> directly in the Supabase database.</p><div class="invite-code-list" id="inviteCodeList"></div><div class="invite-code-actions"><button class="quiet-button" id="inviteCodeToggle" type="button">Show codes</button></div></div></section>
             </section>
 
         </main>
@@ -144,6 +144,7 @@
         </div>
     </div>
 
+
     <aside class="ale-panel" id="alePanel" hidden aria-label="ALE assistant">
         <div class="ale-head">
             <div class="ale-title"><span class="ale-logo">✦</span><div><strong>ALE</strong><small>Otter lab assistant</small></div></div>
@@ -165,6 +166,7 @@
     <script src="tutorial-content.js?v=1"></script>
     <script src="tutorial.js?v=3"></script>
     <script src="account-deletion.js?v=5"></script>
-    <script src="admin.js?v=31"></script>
+    <script src="ale-api.js?v=1"></script>
+    <script src="admin.js?v=33"></script>
 </body>
 </html>

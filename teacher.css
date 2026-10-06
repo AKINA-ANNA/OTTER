@@ -384,6 +384,7 @@ a { color: inherit; text-decoration: none; }
 .diary-entry:last-child { border-bottom: 0; }
 .diary-avatar { flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: var(--lime); color: #16200e; font-size: 15px; font-weight: 800; }
 .diary-entry.late .diary-avatar { background: rgba(207, 95, 80, .16); color: var(--red); }
+.diary-entry.expired .diary-avatar { background: rgba(242, 206, 78, .28); color: var(--yellow); }
 .diary-entry-main { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .diary-entry-main strong { font-size: 16px; color: var(--ink); }
 .diary-email { color: var(--muted); font-weight: 500; font-size: 13px; }
@@ -394,6 +395,7 @@ a { color: inherit; text-decoration: none; }
 .diary-badge { padding: 6px 11px; border-radius: 7px; font-family: "DM Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 .diary-badge.ontime { background: rgba(46, 143, 112, .14); color: var(--mint); }
 .diary-badge.late { background: rgba(207, 95, 80, .14); color: var(--red); }
+.diary-badge.expired { background: rgba(242, 206, 78, .3); color: var(--yellow); }
 .diary-entry-side small { color: var(--muted); font-size: 11px; }
 .diary-blank { padding: 32px 22px; text-align: center; }
 .diary-blank p { margin: 0; }
