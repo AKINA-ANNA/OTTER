@@ -494,7 +494,14 @@
         const trigger = document.getElementById(options.triggerId);
         if (!trigger) return null;
 
-        if (options.name) trigger.textContent = options.name;
+        if (options.name) {
+            /* Triggers that carry an icon plus a label span keep their
+               structure — only the label text is swapped. Plain-text
+               triggers (teacher sidebar) are overwritten as before. */
+            const labelEl = trigger.querySelector("[data-ota-label]");
+            if (labelEl) labelEl.textContent = options.name;
+            else trigger.textContent = options.name;
+        }
 
         const panel = buildPopover(options);
         if (options.popoverId) panel.id = options.popoverId;

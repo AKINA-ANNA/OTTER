@@ -569,7 +569,7 @@ function clearAiCatalogFilter() {
 async function loadInventoryParts() {
     const { data: parts, error } = await supabaseClient
         .from("inventory_parts")
-        .select("id, name, category, quantity, location, notes, ai_use")
+        .select("id, name, category, quantity, location, notes, ai_use, photo_url")
         .order("name", { ascending: true });
     if (error) {
         console.error("Registry load error:", error);
@@ -618,6 +618,88 @@ function visibleParts() {
     return parts;
 }
 
+// ============================================================
+// Free keyword image system — Wikimedia Commons (no API key).
+// Same source the admin parts registry uses, so cards here show
+// the exact same pictures as the admin console.
+// ============================================================
+
+const partImageCache = new Map();
+
+function partImageKeywords(part) {
+    const name = String(part.name || "").trim();
+    const category = String(part.category || "").trim();
+    const words = [];
+    if (name) words.push(name);
+    if (category && category.toLowerCase() !== "uncategorized" && !name.toLowerCase().includes(category.toLowerCase())) words.push(category);
+    return words.length ? words : ["electronics"];
+}
+
+function searchCommonsImage(keyword) {
+    if (partImageCache.has(keyword)) return Promise.resolve(partImageCache.get(keyword));
+    const storedKey = `otter-partimg:${keyword}`;
+    try {
+        const stored = localStorage.getItem(storedKey);
+        if (stored) {
+            partImageCache.set(keyword, stored);
+            return Promise.resolve(stored);
+        }
+    } catch (_) { /* storage unavailable */ }
+    const endpoint = "https://commons.wikimedia.org/w/api.php"
+        + `?action=query&generator=search&gsrsearch=${encodeURIComponent(keyword)}&gsrnamespace=6&gsrlimit=5`
+        + "&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=800&format=json&origin=*";
+    return fetch(endpoint)
+        .then(res => (res.ok ? res.json() : Promise.reject(new Error(`http ${res.status}`))))
+        .then(json => {
+            const pages = Object.values((json && json.query && json.query.pages) || {})
+                .sort((a, b) => (a.index || 0) - (b.index || 0));
+            const hit = pages.find(page => {
+                const info = page.imageinfo && page.imageinfo[0];
+                return info && info.thumburl && /^image\//.test(info.mime || "");
+            });
+            const found = hit ? String(hit.imageinfo[0].thumburl).split("?")[0] : null;
+            partImageCache.set(keyword, found);
+            if (found) { try { localStorage.setItem(storedKey, found); } catch (_) {} }
+            return found;
+        })
+        .catch(() => { partImageCache.set(keyword, null); return null; });
+}
+
+async function resolvePartImage(keywords) {
+    for (const keyword of keywords) {
+        const found = await searchCommonsImage(keyword);
+        if (found) return found;
+    }
+    return null;
+}
+
+function attachKeywordPhoto(container, keywords) {
+    if (!container || !container.isConnected) return;
+    resolvePartImage(keywords).then(src => {
+        if (!src || !container.isConnected) return;
+        if (container.querySelector("img")) return;
+        const img = document.createElement("img");
+        img.className = "thumb-photo";
+        img.alt = "";
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        img.onload = () => img.classList.add("is-loaded");
+        img.onerror = () => img.remove();
+        container.appendChild(img);
+        img.src = src;
+    });
+}
+
+function hydrateCardImages(root) {
+    if (!root) return;
+    root.querySelectorAll(".part-card[data-image-keywords]").forEach(card => {
+        if (card.dataset.imageRequested) return;
+        card.dataset.imageRequested = "1";
+        const thumb = card.querySelector(".part-thumb");
+        if (thumb) attachKeywordPhoto(thumb, card.dataset.imageKeywords.split("\n").filter(Boolean));
+    });
+}
+
 function renderPartsGrid() {
     const grid = document.getElementById("partsGrid");
     if (!inventoryParts.length) {
@@ -629,16 +711,25 @@ function renderPartsGrid() {
         grid.innerHTML = `<div class="empty-state empty-state-error"><strong>No matching parts</strong><p>Try a different search or category.</p></div>`;
         return;
     }
-    grid.innerHTML = parts.map(part => `
-        <article class="part-card" data-part-id="${escapeHtml(part.id)}">
+    grid.innerHTML = parts.map(part => {
+        const custom = String(part.photo_url || "").trim();
+        const photo = custom
+            ? `<img class="thumb-photo" src="${escapeHtml(custom)}" alt="" referrerpolicy="no-referrer" loading="lazy" onload='this.classList.add("is-loaded")' onerror='this.remove()'>`
+            : "";
+        const keywords = custom ? "" : ` data-image-keywords="${escapeHtml(partImageKeywords(part).join("\n"))}"`;
+        return `
+        <article class="part-card" data-part-id="${escapeHtml(part.id)}"${keywords}>
+            <span class="part-thumb"><i class="part-glyph" data-lucide="package" aria-hidden="true"></i>${photo}</span>
             <div class="part-card-head"><strong>${escapeHtml(part.name)}</strong><span class="part-category">${escapeHtml(part.category)}</span></div>
             <p class="part-meta">${escapeHtml(part.location)}</p>
             <div class="part-actions">
                 <span class="part-qty ${part.quantity > 0 ? "" : "zero"}">${part.quantity > 0 ? `${part.quantity} in stock` : "Out of stock"}</span>
                 <button class="add-button ${partCart[part.id] ? "added" : ""}" data-cart-action="toggle" type="button">${partCart[part.id] ? "In cart ✓" : "Add to cart"}</button>
             </div>
-        </article>
-    `).join("");
+        </article>`;
+    }).join("");
+    if (window.lucide) lucide.createIcons();
+    hydrateCardImages(grid);
 }
 
 function cartItemCount() {
@@ -675,8 +766,23 @@ const TABS = {
     labTimings: { section: "Lab timings" }
 };
 
+let tabTransitionToken = 0;
+let tabTransitionAnims = [];
+
+function prefersReducedMotion() {
+    return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function cancelTabTransition() {
+    tabTransitionAnims.forEach(anim => { try { anim.cancel(); } catch (_) {} });
+    tabTransitionAnims = [];
+}
+
 function setActiveTab(tabName) {
     if (!TABS[tabName]) return;
+
+    const token = ++tabTransitionToken;
+    cancelTabTransition();
 
     document.querySelector(".page-heading")?.setAttribute("data-watermark", tabName);
 
@@ -686,15 +792,10 @@ function setActiveTab(tabName) {
         if (isActive) button.setAttribute("aria-current", "page");
         else button.removeAttribute("aria-current");
     });
-    document.querySelectorAll(".tab-view").forEach(view => view.classList.toggle("active", view.id === `${tabName}View`));
 
-    const resetScroll = () => {
-        window.scrollTo(0, 0);
-        document.documentElement.scrollTop = 0;
-        document.body.scrollTop = 0;
-    };
-    resetScroll();
-    requestAnimationFrame(resetScroll);
+    const prevView = document.querySelector(".tab-view.active");
+    const nextView = document.getElementById(`${tabName}View`);
+    const headingText = document.querySelector(".page-heading-text");
 
     const titles = {
         overview: ["Good morning,", currentUser?.name || "student", "Everything the lab has going on for you today."],
@@ -704,26 +805,79 @@ function setActiveTab(tabName) {
         labTimings: ["Lab", "timings", "See which periods the lab is open, and when it is closed."]
     };
     const [lead, accent, description] = titles[tabName];
-    document.getElementById("pageLead").textContent = lead;
-    document.getElementById("pageAccent").textContent = accent;
-    document.getElementById("pageDescription").textContent = description;
-    document.title = `Otter — ${TABS[tabName].section}`;
 
-    if (tabName === "partProposal") {
-        loadInventoryParts();
-        loadMyProposals();
+    const commit = () => {
+        if (token !== tabTransitionToken) return;
+
+        document.querySelectorAll(".tab-view").forEach(view => view.classList.toggle("active", view.id === `${tabName}View`));
+
+        const resetScroll = () => {
+            window.scrollTo(0, 0);
+            document.documentElement.scrollTop = 0;
+            document.body.scrollTop = 0;
+        };
+        resetScroll();
+        requestAnimationFrame(resetScroll);
+
+        document.getElementById("pageLead").textContent = lead;
+        document.getElementById("pageAccent").textContent = accent;
+        document.getElementById("pageDescription").textContent = description;
+        document.title = `Otter — ${TABS[tabName].section}`;
+
+        if (headingText && typeof headingText.animate === "function" && !prefersReducedMotion()) {
+            headingText.animate(
+                [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "translateY(0)" }],
+                { duration: 380, easing: "cubic-bezier(.22, 1, .36, 1)" }
+            );
+        }
+    };
+
+    const runLoaders = () => {
+        if (tabName === "partProposal") {
+            loadInventoryParts();
+            loadMyProposals();
+        }
+        if (tabName === "projectProposal") loadStudentProjects();
+        if (tabName === "borrowLogs") loadBorrowLogs();
+        if (tabName === "overview") {
+            loadOverviewMetrics();
+            loadDeadlines();
+        }
+        if (tabName === "labTimings") loadLabTimings();
+    };
+
+    const canAnimate = !prefersReducedMotion() && prevView && nextView && prevView !== nextView
+        && typeof prevView.animate === "function";
+
+    if (!canAnimate) {
+        commit();
+        runLoaders();
+        return;
     }
-    if (tabName === "projectProposal") {
-        loadStudentProjects();
+
+    const prevStyle = getComputedStyle(prevView);
+    const fromOpacity = Number.parseFloat(prevStyle.opacity);
+    const fromTransform = prevStyle.transform === "none" ? "translateY(0)" : prevStyle.transform;
+    const exitOptions = { duration: 170, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" };
+
+    tabTransitionAnims.push(prevView.animate([
+        { opacity: Number.isNaN(fromOpacity) ? 1 : fromOpacity, transform: fromTransform },
+        { opacity: 0, transform: "translateY(-12px)" }
+    ], exitOptions));
+    if (headingText && typeof headingText.animate === "function") {
+        tabTransitionAnims.push(headingText.animate([
+            { opacity: 1, transform: "translateY(0)" },
+            { opacity: 0, transform: "translateY(-8px)" }
+        ], exitOptions));
     }
-    if (tabName === "borrowLogs") {
-        loadBorrowLogs();
-    }
-    if (tabName === "overview") {
-        loadOverviewMetrics();
-        loadDeadlines();
-    }
-    if (tabName === "labTimings") loadLabTimings();
+
+    runLoaders();
+
+    Promise.all(tabTransitionAnims.map(anim => anim.finished.catch(() => {}))).then(() => {
+        if (token !== tabTransitionToken) return;
+        cancelTabTransition();
+        commit();
+    });
 }
 
 function openProposeModal() {

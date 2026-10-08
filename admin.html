@@ -6,26 +6,47 @@
     <link rel="icon" type="image/png" href="favicon-admin.png?v=3">
     <link rel="shortcut icon" href="favicon-admin.ico?v=3">
     <title>Otter — Admin console</title>
-    <link rel="stylesheet" href="admin.css?v=36">
+    <link rel="stylesheet" href="admin.css?v=41">
     <link rel="stylesheet" href="loading-screen.css?v=3">
     <link rel="stylesheet" href="tutorial.css?v=2">
     <link rel="stylesheet" href="account-deletion.css?v=1">
 </head>
 <body>
+    <a class="corner-brand" href="admin.html" aria-label="Otter admin home"><span class="admin-mark">O</span></a>
+    <div class="corner-account">
+        <button class="admin-identity" id="adminIdentity" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="adminAccountPopover" aria-label="Account">
+            <svg data-lucide="user" aria-hidden="true"></svg>
+            <span class="corner-name" id="adminIdentityLabel" data-ota-label>Admin</span>
+        </button>
+        <button class="corner-signout" id="adminSignOut" type="button" aria-label="Sign out">
+            <svg data-lucide="log-out" aria-hidden="true"></svg>
+            <span class="corner-signout-label">Sign out</span>
+        </button>
+    </div>
     <div class="admin-shell">
-        <aside class="admin-sidebar">
-            <a class="admin-brand" href="admin.html"><span class="admin-mark">O</span><span><strong>otter admin</strong><small>control center</small></span></a>
+        <aside class="admin-pill" aria-label="Admin navigation">
             <nav class="admin-nav" aria-label="Admin navigation">
-                <button class="active" data-admin-tab="dashboard" type="button">Dashboard</button>
-                <button data-admin-tab="registry" type="button">Parts registry</button>
-                <button data-admin-tab="partslog" type="button">Parts log</button>
-                <button data-admin-tab="restock" type="button">Restocking</button>
-                <button data-admin-tab="clock" type="button">Test clock</button>
+                <button class="active" data-admin-tab="dashboard" type="button" aria-label="Dashboard">
+                    <svg data-lucide="layout-dashboard" aria-hidden="true"></svg>
+                    <span class="pill-tip"><span class="pill-tip-text">Dashboard</span></span>
+                </button>
+                <button data-admin-tab="registry" type="button" aria-label="Parts registry">
+                    <svg data-lucide="boxes" aria-hidden="true"></svg>
+                    <span class="pill-tip"><span class="pill-tip-text">Parts registry</span></span>
+                </button>
+                <button data-admin-tab="partslog" type="button" aria-label="Parts log">
+                    <svg data-lucide="scroll-text" aria-hidden="true"></svg>
+                    <span class="pill-tip"><span class="pill-tip-text">Parts log</span></span>
+                </button>
+                <button data-admin-tab="restock" type="button" aria-label="Restocking">
+                    <svg data-lucide="package-plus" aria-hidden="true"></svg>
+                    <span class="pill-tip"><span class="pill-tip-text">Restocking</span></span>
+                </button>
+                <button data-admin-tab="clock" type="button" aria-label="Test clock">
+                    <svg data-lucide="clock" aria-hidden="true"></svg>
+                    <span class="pill-tip"><span class="pill-tip-text">Test clock</span></span>
+                </button>
             </nav>
-            <div class="admin-sidebar-footer">
-                <button class="admin-identity" id="adminIdentity" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="adminAccountPopover">Admin</button>
-                <button id="adminSignOut" type="button">↪ Sign out</button>
-            </div>
         </aside>
 
         <main class="admin-main">
@@ -40,7 +61,7 @@
                 <!-- Live telemetry strip — real values, refreshed in place -->
                 <div class="telemetry-bar" role="status" aria-label="Live system telemetry">
                     <div class="tel-cluster">
-                        <span class="tel-chip"><span class="pulse-dot dot-green" id="telStatusDot" aria-hidden="true"></span><b>SYS_STATUS</b><i id="telSysStatus">ONLINE</i><em id="telStatusCode">#200</em></span>
+                        <span class="tel-chip"><b>SYS_STATUS</b><i id="telSysStatus">ONLINE</i><em id="telStatusCode">#200</em></span>
                         <span class="tel-chip"><b>DB_LATENCY</b><i id="telDbLatency">···</i></span>
                         <span class="tel-chip"><b>ACTIVE_SESSIONS</b><i id="telSessions">1</i></span>
                         <span class="tel-chip"><b>CLOCK_MODE</b><i id="telClockMode">REAL</i></span>
@@ -48,7 +69,7 @@
                         <span class="tel-chip"><b>INVENTORY</b><i id="telInventory">···</i></span>
                     </div>
                     <div class="tel-cluster tel-cluster-right">
-                        <span class="tel-chip tel-chip-rt"><span class="pulse-dot dot-green" aria-hidden="true"></span><b>WS</b><i>LIVE</i></span>
+                        <span class="tel-chip tel-chip-rt"><b>WS</b><i>LIVE</i></span>
                         <span class="tel-date" id="telDate">—</span>
                         <span class="tel-clock" id="telClock">--:--:--</span>
                     </div>
@@ -265,8 +286,8 @@
     <script src="favicon.js?v=2"></script>
     <script src="tutorial-content.js?v=1"></script>
     <script src="tutorial.js?v=3"></script>
-    <script src="account-deletion.js?v=5"></script>
+    <script src="account-deletion.js?v=6"></script>
     <script src="ale-api.js?v=1"></script>
-    <script src="admin.js?v=38"></script>
+    <script src="admin.js?v=40"></script>
 </body>
 </html>

@@ -76,9 +76,28 @@ let aleLastBatch = null;
 let alePlanSeq = 0;
 const aleSessionFolders = new Set();
 
+let tabTransitionToken = 0;
+let tabTransitionAnims = [];
+
+function prefersReducedMotion() {
+    return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function cancelTabTransition() {
+    tabTransitionAnims.forEach(anim => { try { anim.cancel(); } catch (_) {} });
+    tabTransitionAnims = [];
+}
+
 function setTab(tab) {
+    const token = ++tabTransitionToken;
+    cancelTabTransition();
+
     document.querySelectorAll("[data-admin-tab]").forEach(button => button.classList.toggle("active", button.dataset.adminTab === tab));
-    document.querySelectorAll(".admin-view").forEach(view => view.classList.toggle("active", view.id === `${tab}View`));
+
+    const prevView = document.querySelector(".admin-view.active");
+    const nextView = document.getElementById(`${tab}View`);
+    const headingText = document.querySelector(".admin-heading > div");
+
     const details = {
         dashboard: ["Command center", "Live telemetry, restock control and the inventory audit trail in one grid."],
         registry: ["Parts registry", "Manage the equipment catalog without changing application code."],
@@ -87,17 +106,67 @@ function setTab(tab) {
         clock: ["Test clock", "Simulate \"today\" to test overdue notices without waiting."]
     };
     const tabDetails = details[tab] || ["Admin console", "Manage the Otter workspace."];
-    document.getElementById("adminTitle").textContent = tabDetails[0];
-    document.getElementById("adminDescription").textContent = tabDetails[1];
-    if (tab === "dashboard") renderDashboard();
-    if (tab === "partslog") {
-        if (!borrowRowsLoaded) loadPartsLog();
-        else renderPartsLog();
+
+    const commit = () => {
+        if (token !== tabTransitionToken) return;
+
+        document.querySelectorAll(".admin-view").forEach(view => view.classList.toggle("active", view.id === `${tab}View`));
+
+        document.getElementById("adminTitle").textContent = tabDetails[0];
+        document.getElementById("adminDescription").textContent = tabDetails[1];
+
+        if (headingText && typeof headingText.animate === "function" && !prefersReducedMotion()) {
+            headingText.animate(
+                [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "translateY(0)" }],
+                { duration: 380, easing: "cubic-bezier(.22, 1, .36, 1)" }
+            );
+        }
+    };
+
+    const runLoaders = () => {
+        if (tab === "dashboard") renderDashboard();
+        if (tab === "partslog") {
+            if (!borrowRowsLoaded) loadPartsLog();
+            else renderPartsLog();
+        }
+        if (tab === "restock") {
+            if (restockPlan) renderRestockResult();
+            else runRestockAnalysis();
+        }
+    };
+
+    const canAnimate = !prefersReducedMotion() && prevView && nextView && prevView !== nextView
+        && typeof prevView.animate === "function";
+
+    if (!canAnimate) {
+        commit();
+        runLoaders();
+        return;
     }
-    if (tab === "restock") {
-        if (restockPlan) renderRestockResult();
-        else runRestockAnalysis();
+
+    const prevStyle = getComputedStyle(prevView);
+    const fromOpacity = Number.parseFloat(prevStyle.opacity);
+    const fromTransform = prevStyle.transform === "none" ? "translateY(0)" : prevStyle.transform;
+    const exitOptions = { duration: 170, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" };
+
+    tabTransitionAnims.push(prevView.animate([
+        { opacity: Number.isNaN(fromOpacity) ? 1 : fromOpacity, transform: fromTransform },
+        { opacity: 0, transform: "translateY(-12px)" }
+    ], exitOptions));
+    if (headingText && typeof headingText.animate === "function") {
+        tabTransitionAnims.push(headingText.animate([
+            { opacity: 1, transform: "translateY(0)" },
+            { opacity: 0, transform: "translateY(-8px)" }
+        ], exitOptions));
     }
+
+    runLoaders();
+
+    Promise.all(tabTransitionAnims.map(anim => anim.finished.catch(() => {}))).then(() => {
+        if (token !== tabTransitionToken) return;
+        cancelTabTransition();
+        commit();
+    });
 }
 
 async function requireAdmin() {
@@ -106,7 +175,7 @@ async function requireAdmin() {
     const { data: isAdmin, error } = await supabaseClient.rpc("is_admin");
     if (error || !isAdmin) { await supabaseClient.auth.signOut(); window.location.href = "admin-login.html"; return null; }
     window.OtterFavicon?.apply("admin");
-    document.getElementById("adminIdentity").textContent = user.email || "Admin";
+    document.getElementById("adminIdentityLabel").textContent = user.email || "Admin";
     window.OtterAccount?.mount({
         client: supabaseClient,
         triggerId: "adminIdentity",

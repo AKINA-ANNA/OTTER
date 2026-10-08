@@ -192,11 +192,29 @@ function setHeaderStat(tab, value, label) {
     if (labelEl) labelEl.textContent = label;
 }
 
+let tabTransitionToken = 0;
+let tabTransitionAnims = [];
+
+function prefersReducedMotion() {
+    return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function cancelTabTransition() {
+    tabTransitionAnims.forEach(anim => { try { anim.cancel(); } catch (_) {} });
+    tabTransitionAnims = [];
+}
+
 function setTeacherTab(tabName) {
+    const token = ++tabTransitionToken;
+    cancelTabTransition();
+
     document.querySelectorAll("[data-tab]").forEach(button => button.classList.toggle("active", button.dataset.tab === tabName));
-    document.querySelectorAll(".teacher-view").forEach(view => view.classList.toggle("active", view.id === `${tabName}View`));
+
+    const prevView = document.querySelector(".teacher-view.active");
+    const nextView = document.getElementById(`${tabName}View`);
+    const headingText = document.querySelector(".page-heading-text");
+
     activeTeacherTab = tabName;
-    window.scrollTo({ top: 0, behavior: "auto" });
     const titles = {
         overview: ["Overview", "today", "Here is what your students are sharing."],
         parts: ["Part requests", "queue", "Review parts proposals and keep the lab moving."],
@@ -206,18 +224,70 @@ function setTeacherTab(tabName) {
         projects: ["Project proposals", "studio", "Publish build events and keep an eye on student team builds."],
         labTimings: ["Lab timings", "timetable", "Set when the lab is open. Students see this on their dashboard."]
     };
-    const [lead, accent, description] = titles[tabName];
-    document.getElementById("teacherLead").textContent = lead;
-    document.getElementById("teacherAccent").textContent = accent;
-    document.getElementById("teacherDescription").textContent = description;
+    const [lead, accent, description] = titles[tabName] || ["Overview", "", ""];
+
+    const commit = () => {
+        if (token !== tabTransitionToken) return;
+
+        document.querySelectorAll(".teacher-view").forEach(view => view.classList.toggle("active", view.id === `${tabName}View`));
+        window.scrollTo({ top: 0, behavior: "auto" });
+
+        document.getElementById("teacherLead").textContent = lead;
+        document.getElementById("teacherAccent").textContent = accent;
+        document.getElementById("teacherDescription").textContent = description;
+
+        if (headingText && typeof headingText.animate === "function" && !prefersReducedMotion()) {
+            headingText.animate(
+                [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "translateY(0)" }],
+                { duration: 380, easing: "cubic-bezier(.22, 1, .36, 1)" }
+            );
+        }
+    };
+
+    const runLoaders = () => {
+        if (tabName === "overview") updateTeacherPostLimit();
+        if (tabName === "parts") loadProposals();
+        if (tabName === "collateral") loadCollateral();
+        if (tabName === "logs") loadLogs();
+        if (tabName === "notice") { loadNoticeData(); loadStudents(); }
+        if (tabName === "projects") { loadProjects(); }
+        if (tabName === "labTimings") loadLabTimings();
+    };
+
     setHeaderStat(tabName, "—", "loading");
-    if (tabName === "overview") updateTeacherPostLimit();
-    if (tabName === "parts") loadProposals();
-    if (tabName === "collateral") loadCollateral();
-    if (tabName === "logs") loadLogs();
-    if (tabName === "notice") { loadNoticeData(); loadStudents(); }
-    if (tabName === "projects") { loadProjects(); }
-    if (tabName === "labTimings") loadLabTimings();
+
+    const canAnimate = !prefersReducedMotion() && prevView && nextView && prevView !== nextView
+        && typeof prevView.animate === "function";
+
+    if (!canAnimate) {
+        commit();
+        runLoaders();
+        return;
+    }
+
+    const prevStyle = getComputedStyle(prevView);
+    const fromOpacity = Number.parseFloat(prevStyle.opacity);
+    const fromTransform = prevStyle.transform === "none" ? "translateY(0)" : prevStyle.transform;
+    const exitOptions = { duration: 170, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" };
+
+    tabTransitionAnims.push(prevView.animate([
+        { opacity: Number.isNaN(fromOpacity) ? 1 : fromOpacity, transform: fromTransform },
+        { opacity: 0, transform: "translateY(-12px)" }
+    ], exitOptions));
+    if (headingText && typeof headingText.animate === "function") {
+        tabTransitionAnims.push(headingText.animate([
+            { opacity: 1, transform: "translateY(0)" },
+            { opacity: 0, transform: "translateY(-8px)" }
+        ], exitOptions));
+    }
+
+    runLoaders();
+
+    Promise.all(tabTransitionAnims.map(anim => anim.finished.catch(() => {}))).then(() => {
+        if (token !== tabTransitionToken) return;
+        cancelTabTransition();
+        commit();
+    });
 }
 
 /* ---------------- Announcements (overview) ---------------- */
