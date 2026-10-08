@@ -6,7 +6,7 @@
     <link rel="icon" type="image/png" href="favicon-admin.png?v=3">
     <link rel="shortcut icon" href="favicon-admin.ico?v=3">
     <title>Otter — Admin console</title>
-    <link rel="stylesheet" href="admin.css?v=28">
+    <link rel="stylesheet" href="admin.css?v=36">
     <link rel="stylesheet" href="loading-screen.css?v=3">
     <link rel="stylesheet" href="tutorial.css?v=2">
     <link rel="stylesheet" href="account-deletion.css?v=1">
@@ -16,7 +16,8 @@
         <aside class="admin-sidebar">
             <a class="admin-brand" href="admin.html"><span class="admin-mark">O</span><span><strong>otter admin</strong><small>control center</small></span></a>
             <nav class="admin-nav" aria-label="Admin navigation">
-                <button class="active" data-admin-tab="registry" type="button">Parts registry</button>
+                <button class="active" data-admin-tab="dashboard" type="button">Dashboard</button>
+                <button data-admin-tab="registry" type="button">Parts registry</button>
                 <button data-admin-tab="partslog" type="button">Parts log</button>
                 <button data-admin-tab="restock" type="button">Restocking</button>
                 <button data-admin-tab="clock" type="button">Test clock</button>
@@ -30,27 +31,120 @@
         <main class="admin-main">
             <header class="admin-topbar"><span>otter / restricted workspace</span><span class="admin-topbar-right"><span id="adminDate">Today</span><button class="ale-topbar" id="openAleBtn" type="button"><span class="ale-spark">✦</span>Ask ALE</button></span></header>
             <div class="admin-heading">
-                <div><p class="eyebrow">Operations</p><h1 id="adminTitle">Parts registry</h1><p id="adminDescription">Manage the equipment catalog without changing application code.</p></div>
+                <div><p class="eyebrow">Operations</p><h1 id="adminTitle">Command center</h1><p id="adminDescription">Live telemetry, restock control and the inventory audit trail in one grid.</p></div>
                 <span class="admin-badge">ADMIN ACCESS</span>
             </div>
 
-            <section class="admin-view active" id="registryView">
-                <section class="admin-panel wide">
-                    <div class="panel-head"><div><h2>Parts registry</h2><small>Browse folders like a file explorer · ask ALE for anything</small></div><div class="panel-actions"><button class="quiet-button" id="addFolderBtn" type="button">＋&hairsp;New folder</button><button class="action-button" id="openPartModal" type="button">＋&hairsp;Add part</button><button class="quiet-button ale-button" id="aleOrganizeBtn" type="button">✦&hairsp;Ask ALE to tidy up</button></div></div>
-                    <div class="panel-body">
-                        <div class="registry-layout">
-                            <aside class="registry-tree" id="registryTree" aria-label="Folders"></aside>
-                            <div class="registry-main">
-                                <div class="registry-toolbar">
-                                    <nav class="registry-breadcrumb" id="registryBreadcrumb" aria-label="Location"></nav>
-                                    <div class="registry-search">
-                                        <input id="registrySearch" placeholder="Search name, ID, serial — or /folder/part to locate" autocomplete="off" spellcheck="false">
-                                        <button class="registry-search-clear" id="registrySearchClear" type="button" aria-label="Clear search" hidden>&times;</button>
-                                    </div>
-                                    <select id="registryStatusFilter" class="registry-filter" aria-label="Filter by status"><option value="">All statuses</option><option value="available">Available</option><option value="low">Low stock</option><option value="reserved">Reserved</option><option value="unavailable">Unavailable</option><option value="damaged">Damaged</option></select>
+            <section class="admin-view active" id="dashboardView">
+
+                <!-- Live telemetry strip — real values, refreshed in place -->
+                <div class="telemetry-bar" role="status" aria-label="Live system telemetry">
+                    <div class="tel-cluster">
+                        <span class="tel-chip"><span class="pulse-dot dot-green" id="telStatusDot" aria-hidden="true"></span><b>SYS_STATUS</b><i id="telSysStatus">ONLINE</i><em id="telStatusCode">#200</em></span>
+                        <span class="tel-chip"><b>DB_LATENCY</b><i id="telDbLatency">···</i></span>
+                        <span class="tel-chip"><b>ACTIVE_SESSIONS</b><i id="telSessions">1</i></span>
+                        <span class="tel-chip"><b>CLOCK_MODE</b><i id="telClockMode">REAL</i></span>
+                        <span class="tel-chip"><b>UPTIME</b><i id="telUptime">00:00:00</i></span>
+                        <span class="tel-chip"><b>INVENTORY</b><i id="telInventory">···</i></span>
+                    </div>
+                    <div class="tel-cluster tel-cluster-right">
+                        <span class="tel-chip tel-chip-rt"><span class="pulse-dot dot-green" aria-hidden="true"></span><b>WS</b><i>LIVE</i></span>
+                        <span class="tel-date" id="telDate">—</span>
+                        <span class="tel-clock" id="telClock">--:--:--</span>
+                    </div>
+                </div>
+
+                <div class="bento-grid">
+
+                    <!-- MOD_01 — quick metric -->
+                    <article class="bento-card bento-metric span-4">
+                        <header class="bento-head"><span class="mod-code">MOD_01</span><span class="micro-badge badge-lime">REORDER_QUEUE</span></header>
+                        <p class="metric-label">Parts to Order</p>
+                        <div class="metric-row"><span class="metric-value" id="dashMOrder">—</span><span class="metric-trend" id="dashMOrderTrend">···</span></div>
+                        <p class="metric-sub" id="dashMOrderSub">awaiting analysis</p>
+                    </article>
+
+                    <!-- MOD_02 — quick metric -->
+                    <article class="bento-card bento-metric span-4">
+                        <header class="bento-head"><span class="mod-code">MOD_02</span><span class="micro-badge badge-red">CRITICAL_STOCK</span></header>
+                        <p class="metric-label">Critical Stock</p>
+                        <div class="metric-row"><span class="metric-value" id="dashMCritical">—</span><span class="metric-trend" id="dashMCriticalTrend">···</span></div>
+                        <p class="metric-sub" id="dashMCriticalSub">—</p>
+                    </article>
+
+                    <!-- MOD_03 — quick metric -->
+                    <article class="bento-card bento-metric span-4">
+                        <header class="bento-head"><span class="mod-code">MOD_03</span><span class="micro-badge badge-blue">CIRCULATION</span></header>
+                        <p class="metric-label">Active Loans</p>
+                        <div class="metric-row"><span class="metric-value" id="dashMLoans">—</span><span class="metric-trend" id="dashMLoansTrend">···</span></div>
+                        <p class="metric-sub" id="dashMLoansSub">—</p>
+                    </article>
+
+                    <!-- MOD_04 — restock planner, compact parameter grid -->
+                    <article class="bento-card bento-restock span-5 row-span-2">
+                        <header class="bento-head"><span class="mod-code">MOD_04 · RESTOCK_PLANNER</span><span class="micro-badge badge-dim" id="dashPlanBadge">IDLE</span></header>
+                        <div class="param-grid">
+                            <label class="param-cell"><span>DELIVERY_DAYS</span><input id="dashLeadTime" type="number" min="1" value="7" inputmode="numeric"></label>
+                            <label class="param-cell"><span>STOCK_WINDOW</span><input id="dashReviewPeriod" type="number" min="1" value="30" inputmode="numeric"></label>
+                            <label class="param-cell"><span>CONFIDENCE</span><select id="dashServiceLevel"><option value="90">90%</option><option value="95" selected>95%</option><option value="97.5">97.5%</option><option value="99">99%</option></select></label>
+                        </div>
+                        <button class="dash-run" id="dashRunBtn" type="button"><i data-lucide="play" aria-hidden="true"></i><span>Run Analysis</span></button>
+                        <div class="dash-summary" id="dashPlanSummary">No plan on record — set the parameters and run the analysis.</div>
+                        <div class="param-foot"><span>LOOKBACK</span><b>90d</b><span>Z_SCORE</span><b id="dashZScore">1.65</b><span>ENGINE</span><b>deterministic</b></div>
+                    </article>
+
+                    <!-- MOD_05 — audit trail terminal -->
+                    <article class="bento-card bento-terminal span-7 row-span-2">
+                        <header class="bento-head"><span class="mod-code">MOD_05 · INVENTORY_AUDIT_TRAIL</span><span class="term-badge"><span class="pulse-dot dot-green" aria-hidden="true"></span><b id="dashLogCount">0</b> EVENTS</span></header>
+                        <div class="term-window" id="dashLog" role="log" aria-live="polite" tabindex="0"></div>
+                        <footer class="term-foot"><span>tail -f /var/log/otter/inventory.log</span><span id="dashLogLast">—</span></footer>
+                    </article>
+
+                    <!-- MOD_06 — folder load matrix -->
+                    <article class="bento-card span-8">
+                        <header class="bento-head"><span class="mod-code">MOD_06 · FOLDER_LOAD_MATRIX</span><span class="micro-badge badge-dim" id="dashMatrixMeta">—</span></header>
+                        <div class="matrix" id="dashMatrix"></div>
+                    </article>
+
+                    <!-- MOD_07 — alert queue -->
+                    <article class="bento-card span-4">
+                        <header class="bento-head"><span class="mod-code">MOD_07 · ALERT_QUEUE</span><span class="micro-badge badge-dim" id="dashAlertCount">0</span></header>
+                        <div class="alert-list" id="dashAlerts"></div>
+                    </article>
+
+                </div>
+            </section>
+
+            <section class="admin-view" id="registryView">
+                <section class="admin-panel wide registry-panel">
+                    <div class="panel-head">
+                        <div><h2>Parts registry</h2><small>Browse folders like a file explorer · ask ALE for anything</small></div>
+                        <div class="panel-actions">
+                            <button class="quiet-button" id="addFolderBtn" type="button"><i data-lucide="folder-plus" aria-hidden="true"></i>New folder</button>
+                            <button class="quiet-button ale-button" id="aleOrganizeBtn" type="button"><i data-lucide="sparkles" aria-hidden="true"></i>Ask ALE to tidy up</button>
+                        </div>
+                    </div>
+                    <div class="registry-shell">
+                        <aside class="registry-tree" id="registryTree" aria-label="Folders"></aside>
+                        <div class="registry-main">
+                            <div class="registry-actionbar">
+                                <div class="registry-search">
+                                    <i class="registry-search-glyph" data-lucide="search" aria-hidden="true"></i>
+                                    <input id="registrySearch" placeholder="Search parts by name, ID, or tag..." autocomplete="off" spellcheck="false">
+                                    <button class="registry-search-clear" id="registrySearchClear" type="button" aria-label="Clear search" hidden><i data-lucide="x" aria-hidden="true"></i></button>
                                 </div>
-                                <div class="inventory-list" id="inventoryList"></div>
+                                <div class="view-toggle" role="group" aria-label="View style">
+                                    <button class="view-btn" data-view-mode="grid" type="button" aria-label="Grid view" title="Grid view"><i data-lucide="layout-grid" aria-hidden="true"></i></button>
+                                    <button class="view-btn" data-view-mode="list" type="button" aria-label="List view" title="List view"><i data-lucide="list" aria-hidden="true"></i></button>
+                                </div>
+                                <select id="registryStatusFilter" class="registry-filter" aria-label="Filter by status"><option value="">All statuses</option><option value="available">Available</option><option value="low">Low stock</option><option value="reserved">Reserved</option><option value="unavailable">Unavailable</option><option value="damaged">Damaged</option></select>
+                                <button class="reg-add-button" id="openPartModal" type="button"><i data-lucide="plus" aria-hidden="true"></i>Add part</button>
                             </div>
+                            <div class="registry-pathbar">
+                                <nav class="registry-breadcrumb" id="registryBreadcrumb" aria-label="Location"></nav>
+                                <span class="registry-resultcount" id="registryResultCount" aria-live="polite"></span>
+                            </div>
+                            <div class="inventory-list" id="inventoryList"></div>
                         </div>
                     </div>
                 </section>
@@ -61,8 +155,9 @@
                     <div class="panel-head"><div><h2>Parts log</h2><small>What's out of the lab right now — live borrows, overdues and return history</small></div><div class="panel-actions"><button class="quiet-button" id="partslogRefreshBtn" type="button">↻&hairsp;Refresh</button></div></div>
             <div class="panel-body">
                         <div class="restock-stats" id="partslogStats"></div>
-                        <div class="registry-toolbar">
+                        <div class="registry-toolbar plog-toolbar">
                             <div class="registry-search">
+                                <i class="registry-search-glyph" data-lucide="search" aria-hidden="true"></i>
                                 <input id="partslogSearch" placeholder="Search part, code, student, class, reason…" autocomplete="off" spellcheck="false">
                                 <button class="registry-search-clear" id="partslogSearchClear" type="button" aria-label="Clear search" hidden>&times;</button>
                             </div>
@@ -83,18 +178,20 @@
                     <div class="panel-head">
                         <div><h2>Restock planner</h2><small>Demand-driven reorder plan · deterministic algorithm · ALE refines it into a ready receipt</small></div>
                         <div class="panel-actions">
-                            <button class="quiet-button ale-button" id="restockRunBtn" type="button">✦&hairsp;Run analysis</button>
+                            <button class="rc-run" id="restockRunBtn" type="button">Run analysis</button>
                             <button class="quiet-button ale-button" id="restockAiBtn" type="button" hidden>✦&hairsp;Ask AI to refine</button>
                             <button class="action-button" id="restockOrderedBtn" type="button" hidden>✓&hairsp;Ordered — clear list</button>
                         </div>
                     </div>
                     <div class="panel-body">
                         <div class="restock-controls">
-                            <label>Delivery takes (days)<input id="restockLeadTime" type="number" min="1" value="7"></label>
-                            <label>Check stock every (days)<input id="restockReviewPeriod" type="number" min="1" value="30"></label>
-                            <label>Don't run out confidence<select id="restockServiceLevel"><option value="90">90%</option><option value="95" selected>95%</option><option value="97.5">97.5%</option><option value="99">99%</option></select></label>
-                            <label>Learn from last (days)<input id="restockLookback" type="number" min="14" value="90"></label>
-                            <span class="admin-note" style="margin:0;align-self:center;flex:1 1 240px">It only looks at parts students have actually used. Set the delivery time and it orders what will run short before the next order — how much is used is measured from your real borrow history.</span>
+                            <div class="rc-grid">
+                                <label class="rc-cell"><span>Delivery takes</span><input id="restockLeadTime" type="number" min="1" value="7" inputmode="numeric"><em>days</em></label>
+                                <label class="rc-cell"><span>Check stock every</span><input id="restockReviewPeriod" type="number" min="1" value="30" inputmode="numeric"><em>days</em></label>
+                                <label class="rc-cell"><span>Don't run out confidence</span><select id="restockServiceLevel"><option value="90">90%</option><option value="95" selected>95%</option><option value="97.5">97.5%</option><option value="99">99%</option></select><em>service level</em></label>
+                                <label class="rc-cell"><span>Learn from last</span><input id="restockLookback" type="number" min="14" value="90" inputmode="numeric"><em>days</em></label>
+                            </div>
+                            <p class="rc-note"><b>NOTE</b><span>It only looks at parts students have actually used. Set the delivery time and it orders what will run short before the next order — how much is used is measured from your real borrow history.</span></p>
                         </div>
                         <div id="restockAiSummary"></div>
                         <div class="restock-stats" id="restockStats"></div>
@@ -130,7 +227,10 @@
                     <div class="modal-row">
                         <label class="modal-field"><span>Location</span><input id="partLocation" value="Lab storage"></label>
                     </div>
-                    <label class="modal-field"><span>Current picture <em>(optional)</em></span><input id="partPhoto" type="file" accept="image/*" class="file-input"><div class="photo-preview" id="partPhotoPreview" hidden></div></label>
+                        <label class="modal-field"><span>Current picture <em>(optional)</em></span><input id="partPhoto" type="file" accept="image/*" class="file-input"><div class="photo-preview" id="partPhotoPreview" hidden></div></label>
+                        <div class="modal-row">
+                            <label class="modal-field"><span>Image URL <em>(optional override)</em></span><input id="partImageUrl" type="url" placeholder="https://… custom photo, else a free keyword image is used" spellcheck="false" autocomplete="off"></label>
+                        </div>
                 </div>
                 <div class="modal-actions"><button class="quiet-button" data-close-part-modal type="button">Cancel</button><button class="action-button" type="submit">Save part</button></div>
             </form>
@@ -167,6 +267,6 @@
     <script src="tutorial.js?v=3"></script>
     <script src="account-deletion.js?v=5"></script>
     <script src="ale-api.js?v=1"></script>
-    <script src="admin.js?v=33"></script>
+    <script src="admin.js?v=38"></script>
 </body>
 </html>

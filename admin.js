@@ -48,10 +48,20 @@ let partPhotoFile = null;
 let editingPhotoUrl = null;
 let lastFilteredParts = [];
 
-// File-explorer state: null = root (folder tiles), "__all__" = every part, otherwise a folder name.
+// File-explorer state: null = root (unused by the new shell), "__all__" = every part,
+// otherwise a folder name. The tree opens on "All parts".
 const ROOT = null;
 const ALL_PARTS = "__all__";
-let explorerFolder = ROOT;
+let explorerFolder = ALL_PARTS;
+
+// Explorer tree state: folders the user has expanded to reveal their parts.
+let treeExpanded = new Set();
+
+// Grid vs. list rendering of the inventory, remembered across visits.
+let registryViewMode = (() => {
+    try { return localStorage.getItem("otter-registry-view") === "list" ? "list" : "grid"; }
+    catch (error) { return "grid"; }
+})();
 
 // ALE chat state — one in-memory conversation in the side panel.
 // Nothing here is persisted: closing the panel keeps the thread, but the
@@ -70,6 +80,7 @@ function setTab(tab) {
     document.querySelectorAll("[data-admin-tab]").forEach(button => button.classList.toggle("active", button.dataset.adminTab === tab));
     document.querySelectorAll(".admin-view").forEach(view => view.classList.toggle("active", view.id === `${tab}View`));
     const details = {
+        dashboard: ["Command center", "Live telemetry, restock control and the inventory audit trail in one grid."],
         registry: ["Parts registry", "Manage the equipment catalog without changing application code."],
         partslog: ["Parts log", "Track every part that is out of the lab and who is holding it."],
         restock: ["Restock planner", "Demand-driven reorder list with a supplier-ready receipt."],
@@ -78,6 +89,7 @@ function setTab(tab) {
     const tabDetails = details[tab] || ["Admin console", "Manage the Otter workspace."];
     document.getElementById("adminTitle").textContent = tabDetails[0];
     document.getElementById("adminDescription").textContent = tabDetails[1];
+    if (tab === "dashboard") renderDashboard();
     if (tab === "partslog") {
         if (!borrowRowsLoaded) loadPartsLog();
         else renderPartsLog();
@@ -124,9 +136,48 @@ function folderOf(part) {
     return (part.category || "").trim() || "Uncategorized";
 }
 
-function statusDot(status) {
-    const meta = STATUS_META[status] || STATUS_META.available;
-    return `<span class="status-dot" style="background:${meta.color}" title="${escapeHtml(meta.label)}"></span>`;
+// Lucide runs once its CDN script lands; renders that finish earlier are
+// picked up by the onload pass below.
+function renderIcons() {
+    if (window.lucide) window.lucide.createIcons();
+}
+
+// Folder name -> tree/file icon, so the explorer reads at a glance.
+function folderGlyph(name) {
+    const key = String(name || "").toLowerCase();
+    if (key.includes("microcontrol") || key.includes("chip") || key.includes("arduino")) return "cpu";
+    if (key.includes("motor")) return "cog";
+    if (key.includes("sensor")) return "radar";
+    if (key.includes("wire") || key.includes("cable")) return "cable";
+    if (key.includes("component") || key.includes("resistor") || key.includes("capacitor")) return "circuit-board";
+    return "folder";
+}
+
+function partIcon(part) {
+    const folder = folderOf(part);
+    const glyph = folderGlyph(folder);
+    return glyph === "folder" ? "package" : glyph;
+}
+
+// Stock badge: one line that answers "can I take this, and how many are left".
+function stockBadge(part) {
+    const raw = effectiveStatus(part);
+    const status = STATUS_META[raw] ? raw : "available";
+    const qty = Number(part.quantity) || 0;
+    const labels = {
+        available: qty > 0 ? `In Stock · ${qty}` : "In Stock",
+        low: `Low Stock · ${qty}`,
+        reserved: "Reserved",
+        unavailable: "Out of Stock",
+        damaged: "Damaged"
+    };
+    return `<span class="stock-badge stock-${status}"><span class="stock-dot"></span>${escapeHtml(labels[status])}</span>`;
+}
+
+// Physical shelf tag, e.g. "Shelf 3B".
+function locationTag(part) {
+    const where = (part.location || "").trim();
+    return `<span class="loc-tag"><i data-lucide="map-pin" aria-hidden="true"></i>${escapeHtml(where || "No location")}</span>`;
 }
 
 function allFolderNames() {
@@ -151,30 +202,89 @@ function renderTree() {
     const counts = folderCounts();
     const folderNames = allFolderNames();
     if (counts.has("Uncategorized")) folderNames.push("Uncategorized");
-    const nav = (value, label, icon, count) => `<button class="tree-item${explorerFolder === value ? " active" : ""}" data-folder-nav="${escapeHtml(value)}" type="button"><span class="tree-name">${icon}&hairsp;${escapeHtml(label)}</span><span class="tree-count">${count}</span></button>`;
-    tree.innerHTML = `<div class="registry-tree-head">Folders</div>`
-        + nav(ALL_PARTS, "All parts", "▦", registryParts.length)
-        + folderNames.map(name => `<div class="tree-row">${nav(name, name, "▸", counts.get(name) || 0)}${name === "Uncategorized" ? "" : `<button class="tree-del" data-folder-delete="${escapeHtml(name)}" type="button" title="Delete folder" aria-label="Delete folder ${escapeHtml(name)}">&times;</button>`}</div>`).join("");
+
+    const rowActive = value => explorerFolder === value ? " active" : "";
+    const current = value => explorerFolder === value ? ' aria-current="true"' : "";
+
+    const allRow = `
+        <div class="tree-row${rowActive(ALL_PARTS)}">
+            <span class="tree-chev tree-spacer" aria-hidden="true"></span>
+            <button class="tree-item" data-folder-nav="${ALL_PARTS}" type="button"${current(ALL_PARTS)}>
+                <i class="tree-icon" data-lucide="boxes" aria-hidden="true"></i>
+                <span class="tree-name">All parts</span>
+                <span class="tree-count">${registryParts.length}</span>
+            </button>
+        </div>`;
+
+    const folderRows = folderNames.map(name => {
+        const open = treeExpanded.has(name);
+        const childParts = open ? registryParts.filter(part => folderOf(part) === name) : [];
+        const children = !open ? ""
+            : childParts.length
+                ? `<div class="tree-children">${childParts.map(part => `
+                    <button class="tree-file" data-tree-part="${escapeHtml(part.id)}" type="button" title="Open ${escapeHtml(part.name)}">
+                        <i data-lucide="${partIcon(part)}" aria-hidden="true"></i>
+                        <span class="tree-name">${escapeHtml(part.name)}</span>
+                        <span class="tree-count">${Number(part.quantity) || 0}</span>
+                    </button>`).join("")}</div>`
+                : `<div class="tree-children"><span class="tree-empty">Empty folder</span></div>`;
+        return `
+        <div class="tree-group${open ? " open" : ""}">
+            <div class="tree-row${rowActive(name)}">
+                <button class="tree-chev" data-folder-toggle="${escapeHtml(name)}" type="button" aria-expanded="${open}" aria-label="${open ? "Collapse" : "Expand"} ${escapeHtml(name)}">
+                    <i data-lucide="chevron-right" aria-hidden="true"></i>
+                </button>
+                <button class="tree-item" data-folder-nav="${escapeHtml(name)}" type="button"${current(name)}>
+                    <i class="tree-icon" data-lucide="${folderGlyph(name)}" aria-hidden="true"></i>
+                    <span class="tree-name">${escapeHtml(name)}</span>
+                    <span class="tree-count">${counts.get(name) || 0}</span>
+                </button>
+                ${name === "Uncategorized"
+                    ? `<span class="tree-chev tree-spacer" aria-hidden="true"></span>`
+                    : `<button class="tree-del" data-folder-delete="${escapeHtml(name)}" type="button" title="Delete folder" aria-label="Delete folder ${escapeHtml(name)}"><i data-lucide="trash-2" aria-hidden="true"></i></button>`}
+            </div>
+            ${children}
+        </div>`;
+    }).join("");
+
+    tree.innerHTML = `<div class="registry-tree-head"><span>Explorer</span></div>` + allRow + folderRows;
+
     tree.querySelectorAll("[data-folder-nav]").forEach(button => button.addEventListener("click", () => {
         const value = button.dataset.folderNav;
         explorerFolder = value === ALL_PARTS ? ALL_PARTS : value;
         document.getElementById("registrySearch").value = "";
         updateRegistry();
     }));
+    tree.querySelectorAll("[data-folder-toggle]").forEach(button => button.addEventListener("click", () => {
+        const name = button.dataset.folderToggle;
+        if (treeExpanded.has(name)) treeExpanded.delete(name);
+        else treeExpanded.add(name);
+        renderTree();
+    }));
+    tree.querySelectorAll("[data-tree-part]").forEach(button => button.addEventListener("click", () => {
+        const part = registryParts.find(item => item.id === button.dataset.treePart);
+        if (part) openPartDetail(part);
+    }));
     tree.querySelectorAll("[data-folder-delete]").forEach(button => button.addEventListener("click", event => {
         event.stopPropagation();
         deleteFolder(button.dataset.folderDelete);
     }));
+    renderIcons();
 }
 
 function renderBreadcrumb() {
     const el = document.getElementById("registryBreadcrumb");
     if (explorerFolder === ROOT || explorerFolder === ALL_PARTS) {
-        el.innerHTML = `<span>All parts</span>`;
-        return;
+        el.innerHTML = `<i data-lucide="hard-drive" aria-hidden="true"></i><span class="crumb-root">All parts</span>`;
+    } else {
+        el.innerHTML = `<button type="button" data-crumb-root>All parts</button><span class="crumb-sep">/</span><i data-lucide="folder" aria-hidden="true"></i><strong>${escapeHtml(explorerFolder)}</strong>`;
+        el.querySelector("[data-crumb-root]").addEventListener("click", () => { explorerFolder = ALL_PARTS; document.getElementById("registrySearch").value = ""; updateRegistry(); });
     }
-    el.innerHTML = `<button type="button" data-crumb-root>All parts</button><span class="crumb-sep">/</span><strong>${escapeHtml(explorerFolder)}</strong><button class="registry-up" type="button" data-crumb-root>↑ Up</button>`;
-    el.querySelector("[data-crumb-root]").addEventListener("click", () => { explorerFolder = ROOT; document.getElementById("registrySearch").value = ""; updateRegistry(); });
+    const count = lastFilteredParts.length;
+    const total = registryParts.length;
+    const countEl = document.getElementById("registryResultCount");
+    if (countEl) countEl.textContent = `${count} of ${total} part${total === 1 ? "" : "s"}`;
+    renderIcons();
 }
 
 function populateFolderDatalist() {
@@ -235,7 +345,7 @@ async function loadInventory() {
     if (partsResult.error) { document.getElementById("inventoryList").innerHTML = `<div class="empty-admin">No registry available until the admin migration is run.</div>`; return; }
     registryParts = partsResult.data || [];
     registryFolders = (foldersResult.data || []).map(row => row.name);
-    if (explorerFolder && explorerFolder !== ALL_PARTS && !allFolderNames().includes(explorerFolder) && !registryParts.some(part => folderOf(part) === explorerFolder)) explorerFolder = ROOT;
+    if (explorerFolder && explorerFolder !== ALL_PARTS && !allFolderNames().includes(explorerFolder) && !registryParts.some(part => folderOf(part) === explorerFolder)) explorerFolder = ALL_PARTS;
     populateFolderDatalist();
     updateRegistry();
 }
@@ -245,30 +355,41 @@ function renderRegistry() {
     const query = document.getElementById("registrySearch").value.trim();
     const statusFilter = document.getElementById("registryStatusFilter").value;
     const isFiltering = !!query || !!statusFilter;
-    const browsingRoot = !isFiltering && explorerFolder === ROOT;
+    const isList = registryViewMode === "list";
+    listEl.className = `inventory-list ${isList ? "view-list" : "view-grid"}`;
 
     if (!registryParts.length) {
-        listEl.innerHTML = `<div class="empty-state-block"><span class="empty-icon">▦</span><strong>No parts yet</strong><p>Add your first component and ALE can keep it organised for you.</p><button class="action-button" data-empty-add type="button">＋&hairsp;Add a part</button></div>`;
+        listEl.innerHTML = `<div class="empty-state-block"><span class="empty-icon"><i data-lucide="package-plus" aria-hidden="true"></i></span><strong>No parts yet</strong><p>Add your first component and ALE can keep it organised for you.</p><button class="action-button" data-empty-add type="button"><i data-lucide="plus" aria-hidden="true"></i>Add a part</button></div>`;
         listEl.querySelector("[data-empty-add]").addEventListener("click", () => openPartModal(null));
+        renderIcons();
         return;
     }
 
     const parts = lastFilteredParts;
 
-    if (browsingRoot) {
-        const tiles = folderTiles();
-        const orphans = registryParts.filter(part => folderOf(part) === "Uncategorized");
-        listEl.innerHTML = tiles + (orphans.length
-            ? `<div class="folder-block"><div class="folder-head" data-folder-name="Uncategorized"><strong>Uncategorized</strong><span>${orphans.length} part${orphans.length === 1 ? "" : "s"}</span></div><div class="parts-grid">${orphans.map(part => partCard(part, false)).join("")}</div></div>`
-            : "") + (!tiles && !orphans.length ? `<div class="empty-state-block"><span class="empty-icon">▸</span><strong>No folders yet</strong><p>Create a folder or add a part to get started.</p></div>` : "");
-        wireFolderHeads(listEl, query);
+    if (!parts.length) {
+        listEl.innerHTML = (query || statusFilter)
+            ? `<div class="empty-state-block"><span class="empty-icon"><i data-lucide="search-x" aria-hidden="true"></i></span><strong>Nothing found</strong><p>Try a different search or clear the filters.</p></div>`
+            : `<div class="empty-state-block"><span class="empty-icon"><i data-lucide="folder-open" aria-hidden="true"></i></span><strong>This folder is empty</strong><p>Move parts here or ask ALE to reorganise.</p></div>`;
+        renderIcons();
         return;
     }
 
-    if (!parts.length) {
-        listEl.innerHTML = (query || statusFilter)
-            ? `<div class="empty-state-block"><span class="empty-icon">⌕</span><strong>Nothing found</strong><p>Try a different search or clear the filters.</p></div>`
-            : `<div class="empty-state-block"><span class="empty-icon">▸</span><strong>This folder is empty</strong><p>Move parts here or ask ALE to reorganise.</p></div>`;
+    const highlight = !!query;
+
+    if (isList) {
+        const withFolder = explorerFolder === ALL_PARTS || isFiltering;
+        listEl.innerHTML = listHeader(withFolder) + parts.map(part => partRow(part, highlight, withFolder)).join("");
+        renderIcons();
+        return;
+    }
+
+    // "All parts" and search results read as grouped sections; a single open
+    // folder is already the group, so it renders as one flat grid.
+    const grouped = explorerFolder === ALL_PARTS || isFiltering;
+    if (!grouped) {
+        listEl.innerHTML = `<div class="parts-grid">${parts.map(part => partCard(part, highlight)).join("")}</div>`;
+        renderIcons();
         return;
     }
 
@@ -285,16 +406,25 @@ function renderRegistry() {
         return a[0].localeCompare(b[0]);
     });
 
-    listEl.innerHTML = ordered.map(([folder, folderParts]) => `
-        <div class="folder-block">
-            <div class="folder-head" data-folder-name="${escapeHtml(folder)}" title="Open ${escapeHtml(folder)}"><strong>${escapeHtml(folder)}</strong><span>${folderParts.length} part${folderParts.length === 1 ? "" : "s"}${folderParts.length ? ` · ${folderParts.reduce((sum, part) => sum + (Number(part.quantity) || 0), 0)} units` : ""}</span></div>
-            ${folderParts.length ? `<div class="parts-grid">${folderParts.map(part => partCard(part, !!query)).join("")}</div>` : `<div class="folder-empty">Empty folder</div>`}
-        </div>`).join("");
+    listEl.innerHTML = ordered.map(([folder, folderParts]) => {
+        const units = folderParts.reduce((sum, part) => sum + (Number(part.quantity) || 0), 0);
+        return `
+        <section class="grid-section">
+            <button class="grid-section-head" data-folder-name="${escapeHtml(folder)}" type="button" title="Open ${escapeHtml(folder)}">
+                <i data-lucide="${folderGlyph(folder)}" aria-hidden="true"></i>
+                <span class="section-name">${escapeHtml(folder)}</span>
+                <span class="section-count">${folderParts.length} part${folderParts.length === 1 ? "" : "s"} · ${units} unit${units === 1 ? "" : "s"}</span>
+            </button>
+            <div class="parts-grid">${folderParts.map(part => partCard(part, highlight)).join("")}</div>
+        </section>`;
+    }).join("");
 
-    wireFolderHeads(listEl, query);
+    wireFolderHeads(listEl);
+    renderIcons();
+    hydrateCardImages(listEl);
 
     if (query && parts.length <= 2) {
-        const target = listEl.querySelector(".part-card");
+        const target = listEl.querySelector(".part-card, .part-row");
         if (target) {
             target.classList.add("located");
             target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -302,23 +432,19 @@ function renderRegistry() {
     }
 }
 
-function folderTiles() {
-    const counts = folderCounts();
-    const names = allFolderNames();
-    if (!names.length) return "";
-    return `<div class="folder-tiles">${names.map(name => `
-        <button class="folder-tile" data-folder-open="${escapeHtml(name)}" type="button">
-            <span class="tile-icon">▸</span>
-            <span><span class="tile-name">${escapeHtml(name)}</span><span class="tile-count">${counts.get(name) || 0} item${(counts.get(name) || 0) === 1 ? "" : "s"}</span></span>
-        </button>`).join("")}</div>`;
+// Column headers for list view; widths are shared with .part-row in the CSS.
+function listHeader(withFolder) {
+    return `<div class="reg-thead">
+        <span class="col-part">Part</span>
+        ${withFolder ? `<span class="col-folder">Folder</span>` : ""}
+        <span class="col-status">Status</span>
+        <span class="col-qty">Qty</span>
+        <span class="col-loc">Location</span>
+        <span class="col-blank"></span>
+    </div>`;
 }
 
-function wireFolderHeads(listEl, query) {
-    listEl.querySelectorAll("[data-folder-open]").forEach(tile => tile.addEventListener("click", () => {
-        explorerFolder = tile.dataset.folderOpen;
-        document.getElementById("registrySearch").value = "";
-        updateRegistry();
-    }));
+function wireFolderHeads(listEl) {
     listEl.querySelectorAll("[data-folder-name]").forEach(head => head.addEventListener("click", () => {
         explorerFolder = head.dataset.folderName;
         document.getElementById("registrySearch").value = "";
@@ -326,21 +452,129 @@ function wireFolderHeads(listEl, query) {
     }));
 }
 
+// ============================================================
+// Free keyword image system — Wikimedia Commons (no API key)
+// ============================================================
+
+const partImageCache = new Map();
+
+function partImageKeywords(part) {
+    const name = String(part.name || "").trim();
+    const folder = String(folderOf(part) || "").trim();
+    const words = [];
+    if (name) words.push(name);
+    if (folder && folder.toLowerCase() !== "uncategorized" && !name.toLowerCase().includes(folder.toLowerCase())) words.push(folder);
+    return words.length ? words : ["electronics"];
+}
+
+// One Commons search per keyword, cached in memory + localStorage (positive hits only).
+function searchCommonsImage(keyword) {
+    if (partImageCache.has(keyword)) return Promise.resolve(partImageCache.get(keyword));
+    const storedKey = `otter-partimg:${keyword}`;
+    try {
+        const stored = localStorage.getItem(storedKey);
+        if (stored) {
+            partImageCache.set(keyword, stored);
+            return Promise.resolve(stored);
+        }
+    } catch (_) { /* storage unavailable */ }
+    const endpoint = "https://commons.wikimedia.org/w/api.php"
+        + `?action=query&generator=search&gsrsearch=${encodeURIComponent(keyword)}&gsrnamespace=6&gsrlimit=5`
+        + "&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=800&format=json&origin=*";
+    return fetch(endpoint)
+        .then(res => (res.ok ? res.json() : Promise.reject(new Error(`http ${res.status}`))))
+        .then(json => {
+            const pages = Object.values((json && json.query && json.query.pages) || {})
+                .sort((a, b) => (a.index || 0) - (b.index || 0));
+            const hit = pages.find(page => {
+                const info = page.imageinfo && page.imageinfo[0];
+                return info && info.thumburl && /^image\//.test(info.mime || "");
+            });
+            const found = hit ? String(hit.imageinfo[0].thumburl).split("?")[0] : null;
+            partImageCache.set(keyword, found); // in-memory negative cache too
+            if (found) { try { localStorage.setItem(storedKey, found); } catch (_) {} }
+            return found;
+        })
+        .catch(() => { partImageCache.set(keyword, null); return null; });
+}
+
+async function resolvePartImage(keywords) {
+    for (const keyword of keywords) {
+        const found = await searchCommonsImage(keyword);
+        if (found) return found;
+    }
+    return null;
+}
+
+function attachKeywordPhoto(container, keywords) {
+    if (!container || !container.isConnected) return;
+    resolvePartImage(keywords).then(src => {
+        if (!src || !container.isConnected) return;
+        if (container.querySelector("img")) return;
+        const img = document.createElement("img");
+        img.className = "thumb-photo";
+        img.alt = "";
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        img.onload = () => img.classList.add("is-loaded");
+        img.onerror = () => img.remove();
+        container.appendChild(img);
+        img.src = src;
+    });
+}
+
+// Cards render instantly with their lucide glyph; the photo layer is appended
+// once Commons answers. Any failure keeps the glyph — the UI never breaks.
+function hydrateCardImages(root) {
+    if (!root) return;
+    root.querySelectorAll(".part-card[data-image-keywords]").forEach(card => {
+        if (card.dataset.imageRequested) return;
+        card.dataset.imageRequested = "1";
+        const thumb = card.querySelector(".part-thumb");
+        if (thumb) attachKeywordPhoto(thumb, card.dataset.imageKeywords.split("\n").filter(Boolean));
+    });
+}
+
+function partThumb(part) {
+    /* Manual override wins (photo_url / image_url); otherwise the glyph is the
+       base layer and hydrateCardImages() lays the keyword photo on top of it. */
+    const custom = String(part.image_url || part.photo_url || "").trim();
+    const glyph = `<i class="part-glyph" data-lucide="${partIcon(part)}" aria-hidden="true"></i>`;
+    const photo = custom
+        ? `<img class="thumb-photo" src="${escapeHtml(custom)}" alt="" referrerpolicy="no-referrer" loading="lazy" onload='this.classList.add("is-loaded")' onerror='this.remove()'>`
+        : "";
+    return `<span class="part-thumb">${glyph}${photo}</span>`;
+}
+
+function partCode(part) {
+    return escapeHtml(part.part_code || part.serial_number || "NO ID");
+}
+
 function partCard(part, highlight) {
-    const status = effectiveStatus(part);
-    const photo = part.photo_url ? `<img src="${escapeHtml(part.photo_url)}" alt="${escapeHtml(part.name)}" referrerpolicy="no-referrer" loading="lazy">` : `<div class="part-thumb-placeholder">O</div>`;
-    const serial = part.serial_number ? `<span>Serial <b>${escapeHtml(part.serial_number)}</b></span>` : "";
-    return `<article class="part-card${highlight ? " search-hit" : ""}" data-part-id="${escapeHtml(part.id)}" role="button" tabindex="0" title="View ${escapeHtml(part.name)} details">
-        <div class="part-thumb">${photo}</div>
+    const custom = part.image_url || part.photo_url;
+    const keywordAttr = custom ? "" : ` data-image-keywords="${escapeHtml(partImageKeywords(part).join("\n"))}"`;
+    return `<article class="part-card${highlight ? " search-hit" : ""}"${keywordAttr} data-part-id="${escapeHtml(part.id)}" role="button" tabindex="0" title="View ${escapeHtml(part.name)} details">
+        ${partThumb(part)}
         <div class="part-card-body">
-            <div class="part-card-top">
-                <strong>${escapeHtml(part.name)}</strong>
-                ${statusDot(status)}
-            </div>
-            <div class="part-code">${escapeHtml(part.part_code || "—")}</div>
-            <div class="part-meta"><span>Qty <b>${Number(part.quantity) || 0}</b></span>${serial}</div>
+            <strong class="part-name">${escapeHtml(part.name)}</strong>
+            <span class="part-sku">${partCode(part)}</span>
+            <div class="part-tags">${stockBadge(part)}${locationTag(part)}</div>
         </div>
     </article>`;
+}
+
+function partRow(part, highlight, withFolder) {
+    return `<div class="part-row${highlight ? " search-hit" : ""}" data-part-id="${escapeHtml(part.id)}" role="button" tabindex="0" title="View ${escapeHtml(part.name)} details">
+        <span class="row-main">
+            ${partThumb(part)}
+            <span class="row-text"><strong class="part-name">${escapeHtml(part.name)}</strong><span class="part-sku">${partCode(part)}</span></span>
+        </span>
+        ${withFolder ? `<span class="row-folder"><i data-lucide="folder" aria-hidden="true"></i>${escapeHtml(folderOf(part))}</span>` : ""}
+        <span class="row-stock">${stockBadge(part)}</span>
+        <span class="row-qty">${Number(part.quantity) || 0}</span>
+        <span class="row-loc">${locationTag(part)}</span>
+        <i class="row-chev" data-lucide="chevron-right" aria-hidden="true"></i>
+    </div>`;
 }
 
 function openPartDetail(part) {
@@ -348,11 +582,15 @@ function openPartDetail(part) {
     const nameEl = document.getElementById("detailPartName");
     nameEl.textContent = part.name;
     const body = document.getElementById("partDetailBody");
-    const photo = part.photo_url ? `<img src="${escapeHtml(part.photo_url)}" alt="${escapeHtml(part.name)}" referrerpolicy="no-referrer">` : `<div class="detail-photo detail-photo-empty">No picture added</div>`;
+    const customPhoto = String(part.image_url || part.photo_url || "").trim();
+    const photoBlock = customPhoto
+        ? `<img class="thumb-photo" src="${escapeHtml(customPhoto)}" alt="${escapeHtml(part.name)}" referrerpolicy="no-referrer" loading="lazy" onload='this.classList.add("is-loaded")' onerror='this.remove()'>`
+        : `<div class="detail-photo-empty">No picture added</div>`;
     const aiUse = part.ai_use ? `<div class="ai-use"><p>${escapeHtml(part.ai_use)}</p><button class="quiet-button" data-ai-part type="button">Regenerate with AI</button></div>` : `<div class="ai-use"><p class="ai-empty">AI hasn't described this part yet.</p><button class="quiet-button" data-ai-part type="button">Ask AI what it's for</button></div>`;
+    const photoKeywords = customPhoto ? "" : ` data-image-keywords="${escapeHtml(partImageKeywords(part).join("\n"))}"`;
     body.innerHTML = `
         <div class="detail-grid">
-            <div class="detail-photo">${photo}</div>
+            <div class="detail-photo"${photoKeywords}>${photoBlock}</div>
             <div class="detail-info">
                 <div class="detail-row"><span>Part ID</span><code>${escapeHtml(part.part_code || "—")}</code></div>
                 <div class="detail-row"><span>Status</span><strong class="status-text" style="color:${(STATUS_META[status] || STATUS_META.available).color}">${escapeHtml((STATUS_META[status] || STATUS_META.available).label)}</strong></div>
@@ -365,6 +603,8 @@ function openPartDetail(part) {
         <div class="ai-block"><div class="ai-block-head"><span>✦&hairsp; AI usage notes</span></div>${aiUse}</div>
         <div class="modal-actions"><button class="quiet-button" data-edit-part type="button">Edit part</button><button class="danger-button" data-delete-part type="button">Remove part</button></div>`;
     document.getElementById("partDetailBackdrop").hidden = false;
+    const drawerPhoto = body.querySelector(".detail-photo[data-image-keywords]");
+    if (drawerPhoto) attachKeywordPhoto(drawerPhoto, drawerPhoto.dataset.imageKeywords.split("\n").filter(Boolean));
     body.querySelector("[data-ai-part]").addEventListener("click", async event => {
         const button = event.currentTarget;
         button.disabled = true;
@@ -392,6 +632,7 @@ function openPartDetail(part) {
         }
         document.getElementById("partDetailBackdrop").hidden = true;
         await loadInventory();
+        logDash("INV", `part.delete ${part.name} (${part.part_code || "no id"})`);
         toast("Part removed");
     });
 }
@@ -406,6 +647,7 @@ function openPartModal(part) {
     document.getElementById("partStatus").value = part ? (part.status || "available") : "available";
     document.getElementById("partLocation").value = part ? (part.location || "Lab storage") : "Lab storage";
     document.getElementById("partPhoto").value = "";
+    document.getElementById("partImageUrl").value = part ? String(part.image_url || part.photo_url || "") : "";
     populateFolderDatalist();
     partPhotoFile = null;
     editingPhotoUrl = part ? part.photo_url : null;
@@ -1150,6 +1392,7 @@ async function addFolder() {
     const { error } = await supabaseClient.from("part_folders").insert({ name, created_by: user ? user.id : null });
     if (error) { toast(error.code === "23505" ? "That folder already exists" : "Could not create folder"); return; }
     await loadInventory();
+    logDash("SYS", `folder.create "${name}"`);
     toast(`Folder "${name}" created`);
 }
 
@@ -1167,8 +1410,9 @@ async function deleteFolder(name) {
     }
     const { error } = await supabaseClient.from("part_folders").delete().eq("name", name);
     if (error) { toast("Could not delete the folder"); return; }
-    if (explorerFolder === name) explorerFolder = ROOT;
+    if (explorerFolder === name) explorerFolder = ALL_PARTS;
     await loadInventory();
+    logDash("SYS", `folder.delete "${name}"${inside.length ? ` — ${inside.length} part(s) → Uncategorized` : ""}`);
     toast(`Folder "${name}" deleted`);
 }
 
@@ -1206,6 +1450,7 @@ async function setSimClockFromForm(form) {
     const { error } = await supabaseClient.rpc("set_sim_clock", { p_simulated_at: new Date(value).toISOString(), p_label: label || null });
     if (error) { toast("Could not set the test clock"); return; }
     toast("Test clock set — consoles updated");
+    logDash("SYS", `clock.set ${new Date(value).toISOString()}${label ? ` label="${label}"` : ""}`);
     document.getElementById("simClockAt").value = "";
     document.getElementById("simClockLabel").value = "";
     await loadSimClock();
@@ -1217,7 +1462,11 @@ document.getElementById("simClockClear").addEventListener("click", async () => {
     const { error } = await supabaseClient.rpc("clear_sim_clock");
     button.disabled = false;
     if (error) toast("Could not disable the test clock");
-    else { toast("Test clock disabled — both dashboards are back on the real clock"); await loadSimClock(); }
+    else {
+        toast("Test clock disabled — both dashboards are back on the real clock");
+        logDash("SYS", "clock.disable — real time restored");
+        await loadSimClock();
+    }
 });
 async function setSimPreset(days) {
     const now = new Date();
@@ -1226,7 +1475,7 @@ async function setSimPreset(days) {
     target.setDate(target.getDate() + Number(days));
     const { error } = await supabaseClient.rpc("set_sim_clock", { p_simulated_at: target.toISOString(), p_label: `Simulated +${days} days` });
     if (error) toast("Could not set the test clock");
-    else { toast(`Test clock → +${days} days`); await loadSimClock(); }
+    else { toast(`Test clock → +${days} days`); logDash("SYS", `clock.preset +${days} days`); await loadSimClock(); }
 }
 document.querySelectorAll("[data-sim-preset]").forEach(button => button.addEventListener("click", () => setSimPreset(Number(button.dataset.simPreset))));
 
@@ -1330,24 +1579,29 @@ function partsLogStats(entries) {
     };
 }
 
+function partsLogStatsMarkup(stats) {
+    return `
+        <div class="stat"><small>Units out of lab</small><strong>${stats.outUnits}</strong><em class="stat-code">PLOG.01 · units_out</em></div>
+        <div class="stat"><small>Active loans</small><strong>${stats.activeLoans}</strong><em class="stat-code">PLOG.02 · active</em></div>
+        <div class="stat${stats.overdueLoans ? " alert" : ""}"><small>Overdue loans</small><strong>${stats.overdueLoans}</strong><em class="stat-code">PLOG.03 · sla_breach</em></div>
+        <div class="stat"><small>Units returned</small><strong>${stats.returnedRecords}</strong><em class="stat-code">PLOG.04 · closed</em></div>`;
+}
+
 function renderPartsLog() {
     const listEl = document.getElementById("partslogList");
     const statsEl = document.getElementById("partslogStats");
     if (!listEl || !statsEl) return;
     document.getElementById("partslogSearchClear").hidden = !document.getElementById("partslogSearch").value;
     if (!borrowLogRows.length) {
-        statsEl.innerHTML = "";
-        listEl.innerHTML = `<div class="empty-state-block"><span class="empty-icon">⇄</span><strong>No borrow activity yet</strong><p>Once the teacher hands parts out, every unit leaving the lab is logged here.</p></div>`;
+        statsEl.innerHTML = partsLogStatsMarkup({ outUnits: 0, activeLoans: 0, overdueLoans: 0, returnedRecords: 0 });
+        listEl.innerHTML = `<div class="empty-state-block plog-empty"><span class="empty-icon"><i data-lucide="inbox" aria-hidden="true"></i></span><strong>No borrow activity yet</strong><p>Once the teacher hands parts out, every unit leaving the lab is logged here.</p></div>`;
+        renderIcons();
         return;
     }
 
     const entries = buildPartsLogEntries();
     const stats = partsLogStats(entries);
-    statsEl.innerHTML = `
-        <div class="stat"><small>Units out of lab</small><strong>${stats.outUnits}</strong></div>
-        <div class="stat"><small>Active loans</small><strong>${stats.activeLoans}</strong></div>
-        <div class="stat${stats.overdueLoans ? " alert" : ""}"><small>Overdue loans</small><strong>${stats.overdueLoans}</strong></div>
-        <div class="stat"><small>Units returned</small><strong>${stats.returnedRecords}</strong></div>`;
+    statsEl.innerHTML = partsLogStatsMarkup(stats);
 
     const search = document.getElementById("partslogSearch").value.trim().toLowerCase();
     const stateFilter = document.getElementById("partslogStateFilter").value;
@@ -1359,7 +1613,8 @@ function renderPartsLog() {
     });
 
     if (!filtered.length) {
-        listEl.innerHTML = `<div class="empty-state-block"><span class="empty-icon">⌕</span><strong>Nothing matches</strong><p>Try a different search or clear the filter.</p></div>`;
+        listEl.innerHTML = `<div class="empty-state-block plog-empty"><span class="empty-icon"><i data-lucide="search-x" aria-hidden="true"></i></span><strong>Nothing matches</strong><p>Try a different search or clear the filter.</p></div>`;
+        renderIcons();
         return;
     }
 
@@ -1368,21 +1623,21 @@ function renderPartsLog() {
         ${filtered.map(entry => {
             /* Every state needs its own chip. A catch-all "else = Returned" here
                mislabelled approved-but-never-collected requests as returned. */
-            const stateChip = entry.state === "overdue" ? `<span class="tier-pill tier-critical">Overdue</span>`
-                : entry.state === "out" ? `<span class="tier-pill tier-order">Out</span>`
-                : entry.state === "expired" ? `<span class="tier-pill tier-critical">Never collected</span>`
-                : entry.state === "approved" ? `<span class="tier-pill tier-order">To hand out</span>`
-                : entry.state === "standby" ? `<span class="tier-pill tier-none">On standby</span>`
-                : entry.state === "declined" ? `<span class="tier-pill tier-none">Declined</span>`
-                : entry.state === "returned" ? `<span class="tier-pill tier-none">Returned</span>`
-                : `<span class="tier-pill tier-none">Pending</span>`;
+            const stateChip = entry.state === "overdue" ? `<span class="plog-pill pill-overdue">Overdue</span>`
+                : entry.state === "out" ? `<span class="plog-pill pill-out">Active</span>`
+                : entry.state === "expired" ? `<span class="plog-pill pill-overdue">Never collected</span>`
+                : entry.state === "approved" ? `<span class="plog-pill pill-approved">To hand out</span>`
+                : entry.state === "standby" ? `<span class="plog-pill pill-standby">On standby</span>`
+                : entry.state === "declined" ? `<span class="plog-pill pill-standby">Declined</span>`
+                : entry.state === "returned" ? `<span class="plog-pill pill-returned">Returned</span>`
+                : `<span class="plog-pill pill-standby">Pending</span>`;
             return `<div class="plog-row${entry.state === "overdue" || entry.state === "expired" ? " overdue-row" : ""}" data-part-id="${escapeHtml(entry.partId)}" role="button" tabindex="0" title="View ${escapeHtml(entry.name)} in the registry">
                 <div class="plog-part"><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.code)}</small></div>
                 <span class="qty-num">× ${entry.qty}</span>
                 ${stateChip}
-                <span><strong style="color:var(--ink)">${escapeHtml(entry.student)}</strong><br><small>${escapeHtml(entry.class)}</small></span>
-                <span>${escapeHtml(formatStamp(entry.lentAt))}</span>
-                <span>${entry.dueAt ? escapeHtml(formatStamp(entry.dueAt)) : "—"}</span>
+                <span class="plog-who"><strong style="color:var(--ink)">${escapeHtml(entry.student)}</strong><br><small>${escapeHtml(entry.class)}</small></span>
+                <span class="plog-date">${escapeHtml(formatStamp(entry.lentAt))}</span>
+                <span class="plog-date">${entry.dueAt ? escapeHtml(formatStamp(entry.dueAt)) : "—"}</span>
                 <span class="plog-reason">${escapeHtml(entry.reason)}</span>
             </div>`;
         }).join("")}`;
@@ -1514,19 +1769,20 @@ function renderRestockStats() {
     const totalUnits = orderItems.reduce((sum, m) => sum + m.orderQty, 0);
     const criticalCount = restockPlan.items.filter(m => m.tier === "critical").length;
     el.innerHTML = `
-        <div class="stat"><small>Parts to order</small><strong>${orderItems.length}</strong></div>
-        <div class="stat"><small>Units to order</small><strong>${totalUnits}</strong></div>
-        <div class="stat${criticalCount ? " alert" : ""}"><small>Critical</small><strong>${criticalCount}</strong></div>`;
+        <div class="stat"><small>Parts to order</small><strong>${orderItems.length}</strong><em class="stat-code">RSK.01 · types</em></div>
+        <div class="stat"><small>Units to order</small><strong>${totalUnits}</strong><em class="stat-code">RSK.02 · units</em></div>
+        <div class="stat${criticalCount ? " alert" : ""}"><small>Critical</small><strong>${criticalCount}</strong><em class="stat-code">RSK.03 · priority</em></div>`;
 }
 
 function renderNoOrderExplainer() {
     const withDemand = restockPlan.items.filter(m => m.lentEvents > 0).sort((a, b) => b.demandRate - a.demandRate);
     if (!withDemand.length) {
-        return `<div class="restock-sub"><div class="restock-sub-head">Why nothing is ordered</div><div class="empty-state-block"><span class="empty-icon">▦</span><strong>No borrow history detected</strong><p>The planner only reorders parts that students have actually been lent. Borrow a few parts out in the teacher console, wait until they show in the Parts log, then run the analysis again.</p></div></div>`;
+        return `<div class="info-callout"><div class="info-callout-head"><span class="info-dot"></span><b>Why nothing is ordered</b><code>INFO · RSK.00</code></div>
+            <div class="info-callout-body"><span class="callout-icon"><i data-lucide="package-search" aria-hidden="true"></i></span><div><strong>No borrow history detected</strong><p>The planner only reorders parts that students have actually been lent. Borrow a few parts out in the teacher console, wait until they show in the Parts log, then run the analysis again.</p></div></div></div>`;
     }
-    return `<div class="restock-sub">
-        <div class="restock-sub-head">Why nothing is ordered now</div>
-        <div class="restock-note">These parts <b>have been used</b> by students. The leftover stock — what's in the lab record minus what's out with students minus what's been requested — still covers the amount expected to be used before the next order arrives. To test a reorder, lower that part's quantity in the registry (e.g. to 1 or 2).</div>
+    return `<div class="info-callout">
+        <div class="info-callout-head"><span class="info-dot"></span><b>Why nothing is ordered now</b><code>INFO · RSK.00</code></div>
+        <div class="info-callout-body"><div class="info-callout-text">These parts <b>have been used</b> by students. The leftover stock — what's in the lab record minus what's out with students minus what's been requested — still covers the amount expected to be used before the next order arrives. To test a reorder, lower that part's quantity in the registry (e.g. to 1 or 2).</div></div>
     </div>`;
 }
 
@@ -1575,6 +1831,7 @@ function renderRestockResult() {
         }).join("");
         container.innerHTML = `<div class="restock-sub"><div class="restock-sub-head">Order these now</div><div class="restock-scroll"><div class="restock-list">${head}${rows}</div></div></div>` + renderMonitorList(monitorItems);
     }
+    renderIcons();
 }
 
 function refreshRestockFooters() {
@@ -1586,6 +1843,7 @@ function markRestockOrdered() {
     const orderItems = restockOrderItems();
     if (!orderItems.length) return;
     restockPlan = null;
+    logDash("ORDER", `order.cleared ${orderItems.length} type(s) marked as ordered`);
     document.getElementById("restockResult").innerHTML = "";
     document.getElementById("restockAiSummary").innerHTML = "";
     document.getElementById("restockStats").innerHTML = "";
@@ -1667,6 +1925,7 @@ async function askAIRestock() {
         restockPlan.aiReview = true;
         restockPlan.aiSummary = String(parsed.summary || "").trim();
         renderRestockResult();
+        logDash("ORDER", `ai.refine ALE revised ${items.length} line(s)`);
         toast("ALE refined the order — review the receipt");
     } catch (error) {
         console.error(error);
@@ -1706,6 +1965,30 @@ document.getElementById("registrySearch").addEventListener("keydown", event => {
 });
 document.getElementById("registrySearchClear").addEventListener("click", () => { document.getElementById("registrySearch").value = ""; updateRegistry(); document.getElementById("registrySearch").focus(); });
 document.getElementById("registryStatusFilter").addEventListener("change", updateRegistry);
+
+// Grid vs. list rendering of the inventory.
+function syncViewToggle() {
+    document.querySelectorAll("[data-view-mode]").forEach(button => {
+        const on = button.dataset.viewMode === registryViewMode;
+        button.classList.toggle("active", on);
+        button.setAttribute("aria-pressed", String(on));
+    });
+}
+document.querySelectorAll("[data-view-mode]").forEach(button => button.addEventListener("click", () => {
+    registryViewMode = button.dataset.viewMode === "list" ? "list" : "grid";
+    try { localStorage.setItem("otter-registry-view", registryViewMode); } catch (error) { /* storage can be blocked */ }
+    syncViewToggle();
+    renderRegistry();
+}));
+syncViewToggle();
+
+// Lucide icon set — same CDN load the student dashboard uses. Renders that
+// finish before it lands are converted by the onload pass.
+const lucideScript = document.createElement("script");
+lucideScript.src = "https://unpkg.com/lucide@latest";
+lucideScript.async = true;
+lucideScript.onload = () => window.lucide.createIcons();
+document.head.append(lucideScript);
 document.querySelectorAll("[data-close-part-modal]").forEach(button => button.addEventListener("click", closePartModal));
 document.querySelectorAll("[data-close-detail-modal]").forEach(button => button.addEventListener("click", () => { document.getElementById("partDetailBackdrop").hidden = true; }));
 document.getElementById("partModalBackdrop").addEventListener("click", event => { if (event.target === event.currentTarget) closePartModal(); });
@@ -1728,6 +2011,7 @@ partForm.addEventListener("submit", async event => {
     const quantity = Math.max(0, Number(document.getElementById("partQuantity").value) || 0);
     const status = document.getElementById("partStatus").value;
     const location = document.getElementById("partLocation").value.trim() || "Lab storage";
+    const imageUrl = document.getElementById("partImageUrl").value.trim();
     let photoUrl = editingPhotoUrl;
 
     const submitButton = partForm.querySelector("button[type=submit]");
@@ -1742,6 +2026,11 @@ partForm.addEventListener("submit", async event => {
             const { data, error: uploadError } = await supabaseClient.storage.from("part-photos").upload(path, partPhotoFile, { cacheControl: "3600", upsert: false });
             if (uploadError) throw uploadError;
             photoUrl = supabaseClient.storage.from("part-photos").getPublicUrl(path).data.publicUrl;
+        } else if (imageUrl) {
+            // Manual override: an explicit URL beats the generated keyword image.
+            photoUrl = /^https?:\/\//i.test(imageUrl) ? imageUrl : editingPhotoUrl;
+        } else {
+            photoUrl = null; // field cleared → fall back to the keyword image
         }
 
         const payload = { name, category, manual_category: category, ai_category: category, serial_number: serialNumber || null, quantity, status, location, photo_url: photoUrl || null, updated_at: new Date().toISOString() };
@@ -1755,6 +2044,7 @@ partForm.addEventListener("submit", async event => {
         }
         closePartModal();
         await loadInventory();
+        logDash("INV", `part.${partId ? "update" : "create"} ${name} qty=${quantity} status=${status}${category ? ` folder=${category}` : ""}`);
         toast(partId ? "Part updated" : "Part added");
     } catch (error) {
         console.error(error);
@@ -1831,8 +2121,416 @@ document.getElementById("restockResult").addEventListener("input", event => {
     item.orderQty = Math.max(0, Math.round(Number(input.value) || 0));
     refreshRestockFooters();
 });
+// ============================================================
+// Dashboard — bento command center
+// ============================================================
+
+const DASH_SNAPSHOT_KEY = "otter-dash-snapshot";
+let dashTelemetryStarted = false;
+let dashParamsDirty = false;
+let dashMetrics = null;
+let dashLiveEvents = [];
+let dashSeedEvents = [];
+
+const pad2 = value => String(value).padStart(2, "0");
+
+function dashNum(id) {
+    const value = Number(document.getElementById(id).value);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/* The audit terminal is a real trail: live session events (actions taken in
+   this console) plus history rebuilt from inventory timestamps and loans. */
+function logDash(tag, message) {
+    dashLiveEvents.push({ ts: new Date().toISOString(), tag, message: String(message) });
+    if (dashLiveEvents.length > 60) dashLiveEvents.shift();
+    renderDashLog();
+}
+
+function seedDashLog() {
+    const events = [];
+    registryParts.forEach(part => {
+        if (!part.updated_at) return;
+        events.push({ ts: part.updated_at, tag: "INV", message: `part.sync ${part.part_code || part.name} qty=${Number(part.quantity) || 0} status=${part.status}` });
+    });
+    borrowLogRows.forEach(row => {
+        const items = Array.isArray(row.items) ? row.items : [];
+        const units = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        const label = items.map(item => item.name).filter(Boolean).slice(0, 2).join(", ") || `${items.length} item(s)`;
+        const student = row.student_name || "student";
+        if (row.lent_at) events.push({ ts: row.lent_at, tag: "LOAN", message: `hand-out → ${student} ×${units} ${label}` });
+        if (row.returned_at) events.push({ ts: row.returned_at, tag: "LOAN", message: `return-ok ← ${student} ×${units} ${label}` });
+    });
+    events.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+    dashSeedEvents = events.slice(0, 40);
+}
+
+function renderDashLog() {
+    const el = document.getElementById("dashLog");
+    if (!el) return;
+    const all = [...dashSeedEvents, ...dashLiveEvents]
+        .sort((a, b) => String(a.ts).localeCompare(String(b.ts)))
+        .slice(-90);
+    const countEl = document.getElementById("dashLogCount");
+    const lastEl = document.getElementById("dashLogLast");
+    if (!all.length) {
+        el.innerHTML = `<div class="term-line is-idle"><span class="term-ts">--:--:--</span><span class="term-tag tag-sys">SYS</span><span class="term-msg">awaiting inventory events…</span></div>`;
+        if (countEl) countEl.textContent = "0";
+        if (lastEl) lastEl.textContent = "last: —";
+        return;
+    }
+    el.innerHTML = all.map(event => {
+        const date = new Date(event.ts);
+        const stamp = isNaN(date) ? "--:--:--" : `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+        const tag = String(event.tag || "sys").toLowerCase();
+        return `<div class="term-line"><span class="term-ts">${stamp}</span><span class="term-tag tag-${tag}">${escapeHtml(event.tag)}</span><span class="term-msg">${escapeHtml(event.message)}</span></div>`;
+    }).join("");
+    if (countEl) countEl.textContent = String(all.length);
+    if (lastEl) {
+        const last = all[all.length - 1];
+        const lastDate = new Date(last.ts);
+        const stamp = isNaN(lastDate) ? "--:--:--" : `${pad2(lastDate.getHours())}:${pad2(lastDate.getMinutes())}:${pad2(lastDate.getSeconds())}`;
+        lastEl.textContent = `last: ${last.tag.toLowerCase()} @ ${stamp}`;
+    }
+    el.scrollTop = el.scrollHeight;
+}
+
+function computeDashMetrics() {
+    const entries = borrowRowsLoaded ? buildPartsLogEntries() : [];
+    const stats = partsLogStats(entries);
+    const params = {
+        leadDays: dashNum("dashLeadTime") || 7,
+        reviewDays: dashNum("dashReviewPeriod") || 30,
+        lookbackDays: 90,
+        serviceLevel: document.getElementById("dashServiceLevel").value
+    };
+    const plan = buildRestockPlan(params);
+    const orderItems = plan.filter(item => (item.tier === "critical" || item.tier === "order") && item.orderQty > 0);
+    const lowStock = registryParts.filter(part => part.status === "low").length;
+    const zeroStock = registryParts.filter(part => (Number(part.quantity) || 0) <= 0).length;
+    return {
+        params,
+        orderCount: orderItems.length,
+        orderUnits: orderItems.reduce((sum, item) => sum + item.orderQty, 0),
+        critical: plan.filter(item => item.tier === "critical").length,
+        monitor: plan.filter(item => item.tier === "monitor").length,
+        activeLoans: stats.activeLoans,
+        overdue: stats.overdueLoans,
+        unitsOut: stats.outUnits,
+        lowStock,
+        zeroStock
+    };
+}
+
+function readDashSnapshot() {
+    try { return JSON.parse(localStorage.getItem(DASH_SNAPSHOT_KEY) || "null"); }
+    catch (error) { return null; }
+}
+
+function trendFor(el, current, previous, hotOnRise) {
+    if (!el) return;
+    if (previous === null || previous === undefined) {
+        el.textContent = "◇ first read";
+        el.className = "metric-trend trend-flat";
+        return;
+    }
+    const delta = current - previous;
+    if (delta === 0) {
+        el.textContent = "◆ ±0 vs last visit";
+        el.className = "metric-trend trend-flat";
+        return;
+    }
+    const rising = delta > 0;
+    el.textContent = `${rising ? "▲" : "▼"} ${rising ? "+" : ""}${delta} vs last visit`;
+    el.className = `metric-trend ${rising ? (hotOnRise ? "trend-hot" : "trend-up") : "trend-down"}`;
+}
+
+function renderDashMetrics(metrics) {
+    const text = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = String(value); };
+    text("dashMOrder", metrics.orderCount);
+    text("dashMCritical", metrics.critical);
+    text("dashMLoans", metrics.activeLoans);
+    text("dashMOrderSub", `${metrics.orderUnits} unit${metrics.orderUnits === 1 ? "" : "s"} queued · confidence ${metrics.params.serviceLevel}%`);
+    text("dashMCriticalSub", `low_stock: ${metrics.lowStock} · at_zero: ${metrics.zeroStock}`);
+    text("dashMLoansSub", `overdue: ${metrics.overdue} · units_out: ${metrics.unitsOut}`);
+
+    const snapshot = readDashSnapshot();
+    trendFor(document.getElementById("dashMOrderTrend"), metrics.orderCount, snapshot ? snapshot.order : null, false);
+    trendFor(document.getElementById("dashMCriticalTrend"), metrics.critical, snapshot ? snapshot.critical : null, true);
+    trendFor(document.getElementById("dashMLoansTrend"), metrics.activeLoans, snapshot ? snapshot.loans : null, false);
+
+    try {
+        localStorage.setItem(DASH_SNAPSHOT_KEY, JSON.stringify({
+            at: new Date().toISOString(),
+            order: metrics.orderCount,
+            critical: metrics.critical,
+            loans: metrics.activeLoans
+        }));
+    } catch (error) { /* private mode — trends just stay "first read" */ }
+
+    const inventoryEl = document.getElementById("telInventory");
+    if (inventoryEl) {
+        const units = registryParts.reduce((sum, part) => sum + (Number(part.quantity) || 0), 0);
+        inventoryEl.textContent = `${registryParts.length} SKU / ${units} U`;
+    }
+}
+
+function renderDashPlanSummary() {
+    const badge = document.getElementById("dashPlanBadge");
+    const el = document.getElementById("dashPlanSummary");
+    const zEl = document.getElementById("dashZScore");
+    if (!el || !badge) return;
+    const serviceLevel = restockPlan ? restockPlan.params.serviceLevel : document.getElementById("dashServiceLevel").value;
+    if (zEl) zEl.textContent = RESTOCK_Z[serviceLevel] || "1.65";
+    if (!restockPlan) {
+        badge.textContent = "IDLE";
+        badge.className = "micro-badge badge-dim";
+        el.textContent = "No plan on record — set the parameters and run the analysis.";
+        return;
+    }
+    const orderItems = restockOrderItems();
+    const units = orderItems.reduce((sum, item) => sum + item.orderQty, 0);
+    const critical = restockPlan.items.filter(item => item.tier === "critical").length;
+    const monitor = restockPlan.items.filter(item => item.tier === "monitor").length;
+    badge.textContent = orderItems.length ? `READY · ${orderItems.length}` : "CLEAR";
+    badge.className = `micro-badge ${orderItems.length ? "badge-green" : "badge-dim"}`;
+    el.innerHTML = `
+        <div class="plan-stats">
+            <span class="plan-stat">ORDER <b>${orderItems.length}</b></span>
+            <span class="plan-stat">UNITS <b>${units}</b></span>
+            <span class="plan-stat${critical ? " is-crit" : ""}">CRITICAL <b>${critical}</b></span>
+            <span class="plan-stat">MONITOR <b>${monitor}</b></span>
+        </div>
+        ${orderItems.length
+            ? `Plan ready · confidence ${restockPlan.params.serviceLevel}% · lead ${restockPlan.params.leadDays}d${restockPlan.aiReview ? " · ALE refined" : ""}`
+            : "Stock covers expected demand — nothing to order right now."}
+        <br><button type="button" class="plan-link" data-goto="restock">OPEN FULL PLAN →</button>`;
+}
+
+function renderDashMatrix() {
+    const el = document.getElementById("dashMatrix");
+    const meta = document.getElementById("dashMatrixMeta");
+    if (!el) return;
+    const names = allFolderNames();
+    if (registryParts.some(part => folderOf(part) === "Uncategorized")) names.push("Uncategorized");
+    const rows = names.map(name => {
+        const parts = registryParts.filter(part => folderOf(part) === name);
+        return { name, parts: parts.length, units: parts.reduce((sum, part) => sum + (Number(part.quantity) || 0), 0) };
+    }).sort((a, b) => b.units - a.units);
+    const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
+    if (meta) meta.textContent = `${rows.length} FOLDERS · ${registryParts.length} SKUS · ${totalUnits} UNITS`;
+    if (!rows.length) {
+        el.innerHTML = `<p class="metric-sub">no folders yet — create one from the registry tab</p>`;
+        return;
+    }
+    const max = Math.max(1, ...rows.map(row => row.units));
+    el.innerHTML = rows.map(row => `
+        <div class="matrix-row">
+            <span class="matrix-name">${escapeHtml(row.name)}</span>
+            <span class="matrix-count">${row.parts}P</span>
+            <span class="matrix-units">${row.units}U</span>
+            <span class="matrix-bar${row.units <= 2 ? " is-low" : ""}"><i style="width:${Math.max(3, Math.round((row.units / max) * 100))}%"></i></span>
+        </div>`).join("");
+}
+
+function renderDashAlerts(metrics) {
+    const el = document.getElementById("dashAlerts");
+    const countEl = document.getElementById("dashAlertCount");
+    if (!el) return;
+    const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+    const alerts = [];
+    if (metrics.overdue) alerts.push({ level: "crit", title: plural(metrics.overdue, "overdue loan"), hint: "parts log · due back", goto: "partslog" });
+    if (metrics.critical) alerts.push({ level: "crit", title: plural(metrics.critical, "part type") + " critical", hint: "restock · reorder now", goto: "restock" });
+    if (metrics.zeroStock) alerts.push({ level: "warn", title: plural(metrics.zeroStock, "part") + " at zero", hint: "registry · stock check", goto: "registry" });
+    if (metrics.lowStock) alerts.push({ level: "warn", title: plural(metrics.lowStock, "part") + " flagged low stock", hint: "registry · watch shelf", goto: "registry" });
+    if (metrics.params && metrics.params.serviceLevel && metrics.monitor) alerts.push({ level: "warn", title: plural(metrics.monitor, "part") + " on monitor", hint: "restock · watch list", goto: "restock" });
+    if (!alerts.length) alerts.push({ level: "ok", title: "ALL SYSTEMS NOMINAL", hint: "no stock or loan alerts", goto: null });
+    const open = alerts.filter(alert => alert.level !== "ok").length;
+    if (countEl) {
+        countEl.textContent = open ? String(open) : "0";
+        countEl.className = `micro-badge ${open ? "badge-amber" : "badge-green"}`;
+    }
+    el.innerHTML = alerts.map(alert => `
+        <button type="button" class="alert-row level-${alert.level}"${alert.goto ? ` data-goto="${alert.goto}"` : ""}>
+            <span class="alert-dot" aria-hidden="true"></span>
+            <span class="alert-body"><strong>${escapeHtml(alert.title)}</strong><small>${escapeHtml(alert.hint)}</small></span>
+            ${alert.goto ? `<span class="alert-go" aria-hidden="true">→</span>` : ""}
+        </button>`).join("");
+}
+
+function syncDashToRestockForm() {
+    document.getElementById("restockLeadTime").value = document.getElementById("dashLeadTime").value;
+    document.getElementById("restockReviewPeriod").value = document.getElementById("dashReviewPeriod").value;
+    document.getElementById("restockServiceLevel").value = document.getElementById("dashServiceLevel").value;
+}
+
+function syncRestockFormToDash() {
+    if (dashParamsDirty) return;
+    document.getElementById("dashLeadTime").value = document.getElementById("restockLeadTime").value;
+    document.getElementById("dashReviewPeriod").value = document.getElementById("restockReviewPeriod").value;
+    document.getElementById("dashServiceLevel").value = document.getElementById("restockServiceLevel").value;
+}
+
+async function renderDashboard() {
+    try {
+        if (!registryParts.length) await loadInventory();
+        if (!borrowRowsLoaded) await loadPartsLog();
+    } catch (error) {
+        console.error("Dashboard data load failed:", error);
+    }
+    syncRestockFormToDash();
+    const metrics = computeDashMetrics();
+    dashMetrics = metrics;
+    renderDashMetrics(metrics);
+    renderDashPlanSummary();
+    renderDashMatrix();
+    renderDashAlerts(metrics);
+    seedDashLog();
+    renderDashLog();
+    renderIcons();
+}
+
+async function runDashboardAnalysis() {
+    const btn = document.getElementById("dashRunBtn");
+    const badge = document.getElementById("dashPlanBadge");
+    const label = btn.querySelector("span");
+    btn.disabled = true;
+    if (label) label.textContent = "Running…";
+    badge.textContent = "BUSY";
+    badge.className = "micro-badge badge-amber";
+    try {
+        await Promise.all([loadInventory(), loadPartsLog()]);
+        syncDashToRestockForm();
+        const params = restockParamsFromForm();
+        restockPlan = { items: buildRestockPlan(params), params, aiReview: false, aiSummary: "" };
+        renderRestockResult();
+        dashParamsDirty = false;
+        const orderItems = restockOrderItems();
+        const units = orderItems.reduce((sum, item) => sum + item.orderQty, 0);
+        logDash("SYS", `restock.analysis lead=${params.leadDays}d window=${params.reviewDays}d confidence=${params.serviceLevel}%`);
+        logDash("ORDER", orderItems.length
+            ? `plan ready — ${orderItems.length} type(s), ${units} unit(s) queued`
+            : "plan ready — stock covers demand, nothing to order");
+        await renderDashboard();
+        toast(orderItems.length ? `Restock plan ready — ${orderItems.length} part type${orderItems.length === 1 ? "" : "s"} to order` : "Restock plan ready — nothing to order yet");
+    } catch (error) {
+        console.error(error);
+        badge.textContent = "ERROR";
+        badge.className = "micro-badge badge-red";
+        logDash("WARN", "restock.analysis failed — see console");
+        toast("Could not run the restock analysis");
+    } finally {
+        btn.disabled = false;
+        if (label) label.textContent = "Run Analysis";
+    }
+}
+
+/* Telemetry is live: the clock ticks, DB latency is a real timed roundtrip
+   and ACTIVE_SESSIONS counts open admin tabs via a heartbeat channel. */
+function startTelemetry() {
+    if (dashTelemetryStarted) return;
+    dashTelemetryStarted = true;
+    const bootedAt = Date.now();
+    let dbFailures = 0;
+
+    const setSysStatus = ok => {
+        const statusEl = document.getElementById("telSysStatus");
+        const codeEl = document.getElementById("telStatusCode");
+        const dot = document.getElementById("telStatusDot");
+        if (statusEl) statusEl.textContent = ok ? "ONLINE" : "DEGRADED";
+        if (codeEl) codeEl.textContent = ok ? "#200" : "#503";
+        if (dot) dot.className = `pulse-dot ${ok ? "dot-green" : "dot-amber"}`;
+    };
+
+    const tick = () => {
+        const now = new Date();
+        const clockEl = document.getElementById("telClock");
+        if (clockEl) clockEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+        const dateEl = document.getElementById("telDate");
+        if (dateEl) dateEl.textContent = now.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
+        const upEl = document.getElementById("telUptime");
+        if (upEl) {
+            let seconds = Math.floor((Date.now() - bootedAt) / 1000);
+            const hours = Math.floor(seconds / 3600);
+            seconds %= 3600;
+            upEl.textContent = `${pad2(hours)}:${pad2(Math.floor(seconds / 60))}:${pad2(seconds % 60)}`;
+        }
+        const modeEl = document.getElementById("telClockMode");
+        if (modeEl) modeEl.textContent = simClockNow ? "SIMULATED" : "REAL";
+    };
+    tick();
+    setInterval(tick, 1000);
+
+    const probe = async () => {
+        const el = document.getElementById("telDbLatency");
+        const start = performance.now();
+        try {
+            const { error } = await supabaseClient.rpc("read_sim_clock");
+            if (error) throw error;
+            const ms = Math.max(1, Math.round(performance.now() - start));
+            if (el) { el.textContent = `${ms}ms`; el.dataset.state = "ok"; }
+            dbFailures = 0;
+            setSysStatus(true);
+        } catch (error) {
+            dbFailures++;
+            if (el) { el.textContent = "ERR"; el.dataset.state = "err"; }
+            if (dbFailures >= 2) setSysStatus(false);
+        }
+    };
+    probe();
+    setInterval(probe, 15000);
+
+    startSessionCounter();
+}
+
+function startSessionCounter() {
+    if (typeof BroadcastChannel === "undefined") return;
+    let channel;
+    try { channel = new BroadcastChannel("otter-admin-telemetry"); }
+    catch (error) { return; }
+    const peers = new Map();
+    const selfId = randomId();
+    channel.onmessage = event => {
+        const data = event.data;
+        if (!data || data.id === selfId) return;
+        if (data.type === "ping") {
+            peers.set(data.id, Date.now());
+            channel.postMessage({ type: "pong", id: selfId });
+        } else if (data.type === "pong") {
+            peers.set(data.id, Date.now());
+        }
+    };
+    setInterval(() => {
+        channel.postMessage({ type: "ping", id: selfId });
+        const cutoff = Date.now() - 5000;
+        peers.forEach((seen, id) => { if (seen < cutoff) peers.delete(id); });
+        const el = document.getElementById("telSessions");
+        if (el) el.textContent = String(peers.size + 1);
+    }, 2000);
+}
+
+// Dashboard wiring
+document.getElementById("dashRunBtn").addEventListener("click", runDashboardAnalysis);
+["dashLeadTime", "dashReviewPeriod", "dashServiceLevel"].forEach(id => {
+    document.getElementById(id).addEventListener("input", () => {
+        dashParamsDirty = true;
+        document.getElementById("dashZScore").textContent = RESTOCK_Z[document.getElementById("dashServiceLevel").value] || "1.65";
+        const badge = document.getElementById("dashPlanBadge");
+        if (restockPlan) { badge.textContent = "STALE"; badge.className = "micro-badge badge-amber"; }
+    });
+});
+document.getElementById("dashAlerts").addEventListener("click", event => {
+    const row = event.target.closest("[data-goto]");
+    if (row) setTab(row.dataset.goto);
+});
+document.getElementById("dashPlanSummary").addEventListener("click", event => {
+    if (event.target.closest("[data-goto]")) setTab("restock");
+});
+
 supabaseClient.channel("admin-borrow-live").on("postgres_changes", { event: "*", schema: "public", table: "part_proposals" }, async () => {
     if (borrowRowsLoaded) await loadPartsLog();
+    logDash("WS", "part_proposals change → parts log reloaded");
+    if (document.getElementById("dashboardView").classList.contains("active")) renderDashboard();
     const restockActive = document.getElementById("restockView").classList.contains("active");
     if (restockPlan && restockActive) {
         const params = restockPlan.params;
@@ -1846,6 +2544,8 @@ supabaseClient.channel("admin-borrow-live").on("postgres_changes", { event: "*",
         const user = await requireAdmin();
         if (!user) return;
         await Promise.all([loadInventory(), loadSimClock(), loadInviteCodes()]);
+        await renderDashboard();
+        startTelemetry();
         if (window.OtterTutorial) {
             OtterTutorial.autostart("admin", {
                 theme: "dark",
