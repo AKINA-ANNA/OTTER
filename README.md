@@ -11,15 +11,7 @@ Otter is a browser-based lab equipment workspace for students, teachers, and adm
 - **Teacher console** (`teacher-login.html`): review equipment requests, manage announcements and projects, view student activity, and publish lab timings.
 - **Admin console** (`admin-login.html`): manage the parts registry, track loans, plan restocks, manage invite codes, and use ALE, the lab assistant.
 
-## Run Locally
 
-The project has no build step or package manager. Serve the project directory over HTTP rather than opening the pages with `file://`:
-
-```bash
-python -m http.server 5500
-```
-
-Then open `http://localhost:5500/` and choose the relevant workspace. Any static file server can be used instead.
 
 ## Backend Setup
 

@@ -1,35 +1,12 @@
 /* ============================================================
-   OTTER TOURS
-   Self-contained so the same overlay reads correctly on the dark
-   student and admin consoles and the light teacher console. The
-   host page sets data-theme on the root, ring and card.
+   OTTER TOURS — Otter-only tutorial (no card/box)
+   The otter IS the interface — speech bubble shows everything.
    ============================================================ */
 
-.ot-scrim,
-.ot-ring,
-.ot-card {
-    --ot-ink: #f4f5ef;
-    --ot-muted: #9aa39a;
-    --ot-panel: #161a17;
-    --ot-panel-2: #1e2420;
-    --ot-line: rgba(244, 245, 239, .14);
-    --ot-accent: #c8f36d;
-    --ot-accent-ink: #16200e;
-    --ot-shadow: 0 26px 60px rgba(0, 0, 0, .5);
-}
+/* Ensure no old card/box elements show up */
+.ot-card { display: none !important; }
 
-.ot-scrim[data-theme="light"],
-.ot-ring[data-theme="light"],
-.ot-card[data-theme="light"] {
-    --ot-ink: #1d241f;
-    --ot-muted: #6c736a;
-    --ot-panel: #fdfdfa;
-    --ot-panel-2: #f2f2ec;
-    --ot-line: rgba(29, 36, 31, .16);
-    --ot-accent: #2f6f57;
-    --ot-accent-ink: #ffffff;
-    --ot-shadow: 0 26px 60px rgba(30, 42, 32, .22);
-}
+/* ---------------- scrim & spotlight ---------------- */
 
 .ot-scrim {
     position: fixed;
@@ -43,10 +20,6 @@
 
 @keyframes otFade { from { opacity: 0; } to { opacity: 1; } }
 
-/* ---------------- spotlight ---------------- */
-
-/* The oversized spread shadow cuts the hole; the element itself is
-   transparent, so whatever sits under it stays visible and lit. */
 .ot-ring {
     position: fixed;
     z-index: 9001;
@@ -55,183 +28,250 @@
     box-shadow: 0 0 0 9999px rgba(6, 10, 8, .66);
     transition: top .2s var(--ot-ease, ease), left .2s var(--ot-ease, ease),
                 width .2s var(--ot-ease, ease), height .2s var(--ot-ease, ease);
+    border-radius: 12px;
+    animation: ringPulse 2s ease-in-out infinite;
+}
+
+@keyframes ringPulse {
+    0%, 100% { box-shadow: 0 0 0 9999px rgba(6, 10, 8, .66), 0 0 20px var(--ot-accent); }
+    50% { box-shadow: 0 0 0 9999px rgba(6, 10, 8, .66), 0 0 30px var(--ot-accent); }
 }
 
 .ot-ring[hidden] { display: none; }
 
 .ot-ring[data-theme="light"] { box-shadow: 0 0 0 9999px rgba(45, 54, 45, .58); }
 
-/* ---------------- card ---------------- */
-
-.ot-card {
-    position: fixed;
-    z-index: 9002;
-    width: min(384px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 20px 22px 18px;
-    border: 1px solid var(--ot-line);
-    border-radius: 18px;
-    background: var(--ot-panel);
-    color: var(--ot-ink);
-    box-shadow: var(--ot-shadow);
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 13px;
-    line-height: 1.6;
-    animation: otPop .24s cubic-bezier(.2, .9, .3, 1);
+/* Theme variables */
+.ot-scrim,
+.ot-ring,
+.otter-side {
+    --ot-ink: #f4f5ef;
+    --ot-muted: #9aa39a;
+    --ot-panel: #161a17;
+    --ot-panel-2: #1e2420;
+    --ot-line: rgba(244, 245, 239, .14);
+    --ot-accent: #c8f36d;
+    --ot-accent-ink: #16200e;
 }
 
-@keyframes otPop {
-    from { opacity: 0; transform: translateY(10px) scale(.97); }
+.ot-scrim[data-theme="light"],
+.ot-ring[data-theme="light"],
+.otter-side[data-theme="light"] {
+    --ot-ink: #1d241f;
+    --ot-muted: #6c736a;
+    --ot-panel: #fdfdfa;
+    --ot-panel-2: #f2f2ec;
+    --ot-line: rgba(29, 36, 31, .16);
+    --ot-accent: #2f6f57;
+    --ot-accent-ink: #ffffff;
+}
+
+/* ---------------- otter side panel — BIG ---------------- */
+
+.otter-side {
+    position: fixed;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+    pointer-events: none;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    transition: left .3s cubic-bezier(.2, .9, .3, 1), top .3s cubic-bezier(.2, .9, .3, 1),
+                right .3s cubic-bezier(.2, .9, .3, 1), bottom .3s cubic-bezier(.2, .9, .3, 1);
+    animation: otterEnter .4s cubic-bezier(.2, .9, .3, 1);
+    max-width: 320px;
+}
+
+@keyframes otterEnter {
+    from { opacity: 0; transform: translateX(40px); }
     to { opacity: 1; transform: none; }
 }
 
-.ot-card h2 {
-    margin: 12px 0 0;
-    font-size: 18px;
-    line-height: 1.3;
-    letter-spacing: -.4px;
+/* Speech bubble — holds ALL content */
+.otter-bubble {
+    width: 100%;
+    max-width: 320px;
+    padding: 18px 20px;
+    border-radius: 20px 20px 6px 20px;
+    background: var(--ot-panel);
+    border: 1px solid var(--ot-line);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    color: var(--ot-ink);
+    backdrop-filter: blur(8px);
+    position: relative;
+    animation: bubblePop 0.3s cubic-bezier(.2, .9, .3, 1);
+    pointer-events: auto; /* Allow button clicks */
 }
 
-.ot-card p { margin: 8px 0 0; }
+.otter-bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -10px;
+    right: 24px;
+    width: 18px;
+    height: 18px;
+    background: var(--ot-panel);
+    border-right: 1px solid var(--ot-line);
+    border-bottom: 1px solid var(--ot-line);
+    transform: rotate(45deg);
+}
 
-.ot-head {
+.otter-bubble-content {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    gap: 10px;
 }
 
-.ot-act { display: grid; min-width: 0; }
-.ot-act strong {
-    font-size: 12px;
+.ot-bubble-title {
+    font-size: 16px;
     font-weight: 700;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-}
-.ot-act em {
-    font-style: normal;
-    font-size: 11px;
+    line-height: 1.3;
     color: var(--ot-accent);
 }
 
-.ot-close {
-    flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
-    margin: -4px -6px 0 0;
-    border: 0;
-    border-radius: 9px;
-    background: none;
-    color: var(--ot-muted);
-    font-size: 22px;
-    line-height: 1;
-    cursor: pointer;
+.ot-bubble-body {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ot-ink);
 }
-.ot-close:hover { background: var(--ot-panel-2); color: var(--ot-ink); }
 
-.ot-progress {
+.ot-bubble-tip {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 14px;
-}
-
-.ot-count {
-    margin-left: auto;
-    color: var(--ot-muted);
-    font-size: 10px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    white-space: nowrap;
-}
-
-.ot-dots { display: flex; flex-wrap: wrap; gap: 5px; }
-
-.ot-dot {
-    width: 8px;
-    height: 8px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: var(--ot-line);
-    cursor: pointer;
-    transition: background .16s ease, transform .16s ease;
-}
-.ot-dot.is-done { background: var(--ot-muted); }
-.ot-dot.is-current { background: var(--ot-accent); transform: scale(1.35); }
-.ot-dot:hover { transform: scale(1.35); }
-
-.ot-track {
-    flex: 1;
-    height: 4px;
-    border-radius: 4px;
-    background: var(--ot-line);
-    overflow: hidden;
-}
-.ot-track span {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: var(--ot-accent);
-    transition: width .24s ease;
-}
-
-.ot-body { color: var(--ot-muted); }
-
-.ot-tip {
-    display: flex;
-    gap: 9px;
-    margin-top: 12px;
+    gap: 8px;
     padding: 10px 12px;
+    background: var(--ot-panel-2);
     border: 1px solid var(--ot-line);
     border-left: 3px solid var(--ot-accent);
-    border-radius: 11px;
-    background: var(--ot-panel-2);
-    font-size: 12px;
-    line-height: 1.55;
-}
-.ot-tip span { flex: 0 0 auto; color: var(--ot-accent); }
-
-.ot-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 18px;
-}
-
-.ot-back,
-.ot-next {
-    padding: 9px 16px;
-    border: 1px solid var(--ot-line);
     border-radius: 10px;
-    background: none;
-    color: var(--ot-ink);
-    font: inherit;
     font-size: 12px;
-    cursor: pointer;
-    transition: background .16s ease, border-color .16s ease;
+    line-height: 1.5;
 }
-.ot-back:hover:not(:disabled) { background: var(--ot-panel-2); }
-.ot-back:disabled { opacity: .35; cursor: not-allowed; }
+.ot-bubble-tip span { color: var(--ot-accent); flex-shrink: 0; }
 
-.ot-next {
-    margin-left: auto;
+.ot-bubble-progress {
+    font-size: 10px;
+    color: var(--ot-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: right;
+}
+
+.ot-bubble-nav {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+.ot-bubble-btn {
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: transform .1s ease, box-shadow .1s ease, background .15s ease;
+    border: 1px solid var(--ot-line);
+    background: var(--ot-panel-2);
+    color: var(--ot-ink);
+}
+
+.ot-bubble-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+}
+
+.ot-bubble-btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+
+.ot-bubble-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.ot-bubble-next {
     border-color: transparent;
     background: var(--ot-accent);
     color: var(--ot-accent-ink);
-    font-weight: 600;
 }
-.ot-next:hover { filter: brightness(1.08); }
 
-/* ---------------- reduced motion ---------------- */
+.ot-bubble-next:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: 0 8px 24px rgba(200, 243, 109, 0.4);
+}
 
+/* Otter say text (small hint under canvas) */
+.otter-say {
+    font-size: 11px;
+    color: var(--ot-muted);
+    text-align: right;
+    padding-right: 4px;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+/* Canvas — BIGGER otter */
+.otter-canvas-wrap {
+    width: 240px;
+    height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.4));
+    pointer-events: none;
+}
+
+.otter-tut-canvas {
+    width: 240px !important;
+    height: 240px !important;
+    pointer-events: none;
+}
+
+.otter-side[data-theme="light"] .otter-canvas-wrap {
+    filter: drop-shadow(0 12px 32px rgba(30, 42, 32, 0.18));
+}
+
+/* Bubble animation */
+@keyframes bubblePop {
+    0% { transform: scale(0.85); opacity: 0; }
+    50% { transform: scale(1.03); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
     .ot-scrim,
-    .ot-card { animation: none; }
+    .otter-side { animation: none; }
     .ot-ring,
-    .ot-track span,
-    .ot-dot { transition: none; }
+    .ot-bubble-btn { transition: none; animation: none; }
+    .otter-bubble { animation: none; }
+}
+
+/* Mobile responsive */
+@media (max-width: 700px) {
+    .otter-canvas-wrap {
+        width: 200px;
+        height: 200px;
+    }
+    .otter-tut-canvas {
+        width: 200px !important;
+        height: 200px !important;
+    }
+    .otter-bubble {
+        max-width: 280px;
+        padding: 16px 18px;
+    }
+    .ot-bubble-title { font-size: 15px; }
+    .ot-bubble-body { font-size: 13px; }
+}
+
+@media (max-width: 480px) {
+    .otter-side { max-width: 90vw; }
+    .otter-canvas-wrap {
+        width: 170px;
+        height: 170px;
+    }
+    .otter-tut-canvas {
+        width: 170px !important;
+        height: 170px !important;
+    }
+    .otter-bubble { max-width: 90vw; }
+    .ot-bubble-btn { padding: 7px 12px; font-size: 11px; }
 }
