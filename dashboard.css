@@ -1138,8 +1138,8 @@ small { font-size: var(--fs-xs); }
 .ai-search-button {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 10px 15px;
+    gap: 8px;
+    padding: 10px 16px;
     border-radius: var(--r-md);
     background: linear-gradient(135deg, rgba(24, 168, 115, 0.12), rgba(16, 185, 129, 0.05));
     border: 1px solid rgba(24, 168, 115, 0.35);

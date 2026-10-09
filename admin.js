@@ -185,7 +185,8 @@ async function requireAdmin() {
         name: user.user_metadata?.full_name || user.email || "Admin",
         email: user.email,
         signOutHref: "admin-login.html",
-        toast
+        toast,
+        onTutorialNavigate: step => { if (step && step.go) setTab(step.go); }
     });
     document.getElementById("adminDate").textContent = new Date().toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
     return user;
@@ -1239,6 +1240,7 @@ function openAlePanel() {
     const panel = document.getElementById("alePanel");
     if (!panel.hidden) return;
     panel.hidden = false;
+    document.getElementById("openAleBtn").classList.add("active");
     if (!document.getElementById("aleMessages").children.length) {
         renderAleWelcome();
         renderAleSuggestions();
@@ -1248,6 +1250,7 @@ function openAlePanel() {
 
 function closeAlePanel() {
     document.getElementById("alePanel").hidden = true;
+    document.getElementById("openAleBtn").classList.remove("active");
 }
 
 async function sendAleMessage(text, options = {}) {
@@ -2013,7 +2016,11 @@ supabaseClient.channel("admin-clock-live").on("postgres_changes", { event: "*", 
 // Registry UI wiring
 document.getElementById("openPartModal").addEventListener("click", () => openPartModal(null));
 document.getElementById("addFolderBtn").addEventListener("click", addFolder);
-document.getElementById("openAleBtn").addEventListener("click", openAlePanel);
+document.getElementById("openAleBtn").addEventListener("click", () => {
+    const panel = document.getElementById("alePanel");
+    if (panel.hidden) openAlePanel();
+    else closeAlePanel();
+});
 document.getElementById("closeAleBtn").addEventListener("click", closeAlePanel);
 document.getElementById("aleOrganizeBtn").addEventListener("click", () => sendAleMessage("Organize the registry", { organize: true }));
 document.getElementById("aleStopBtn").addEventListener("click", interruptAle);
@@ -2616,10 +2623,17 @@ supabaseClient.channel("admin-borrow-live").on("postgres_changes", { event: "*",
         await renderDashboard();
         startTelemetry();
         if (window.OtterTutorial) {
-            OtterTutorial.autostart("admin", {
-                theme: "dark",
-                onNavigate: step => { if (step.go) setTab(step.go); }
-            });
+            if (!window.OtterTutorial.hasSeen("admin")) {
+                (window.OtterTutorial.showTutorialPrompt || window.showTutorialPrompt)("admin", {
+                    theme: "dark",
+                    onNavigate: step => { if (step.go) setTab(step.go); }
+                });
+            } else if (window.OtterTutorial.autostart) {
+                OtterTutorial.autostart("admin", {
+                    theme: "dark",
+                    onNavigate: step => { if (step.go) setTab(step.go); }
+                });
+            }
         }
     } catch (error) {
         console.error("Admin dashboard startup failed:", error);
@@ -2627,4 +2641,98 @@ supabaseClient.channel("admin-borrow-live").on("postgres_changes", { event: "*",
     } finally {
         window.OtterLoading?.hide();
     }
+
+    // ============================================================
+    // ALE PILL — Old-school pixelated terminal WHITE shades
+    // 8 FPS (125ms), monochrome palette, aggressive quantization
+    // ============================================================
+
+    (function () {
+        const TEXT = "ASK ALE";
+        const CHARS = TEXT.split("");
+        const FRAME_INTERVAL = 125;   // ~8 FPS — choppy terminal feel
+        const PHASE_STEP = 0.03;      // tiny step = very slow crawl
+        let phase = 0;
+        let intervalId = null;
+        let pillTextEl = null;
+
+        // Monochrome white shades — from dim to bright (like terminal phosphor glow)
+        const WHITE_SHADES = [
+            "#333333", // very dim
+            "#4a4a4a", // dim
+            "#666666", // low
+            "#808080", // medium-low
+            "#999999", // medium
+            "#b3b3b3", // medium-high
+            "#cccccc", // high
+            "#e6e6e6", // very high
+            "#ffffff", // full bright
+            "#e6e6e6", // very high
+            "#cccccc", // high
+            "#b3b3b3", // medium-high
+            "#999999", // medium
+            "#808080", // medium-low
+            "#666666", // low
+            "#4a4a4a", // dim
+        ];
+
+        // Aggressive quantization — only 16 discrete phase positions
+        function quantizePhase(p, steps) {
+            return Math.round(p * steps) / steps;
+        }
+
+        function whiteShadeForPhase(p, charIndex) {
+            const paletteSize = WHITE_SHADES.length;
+            // Large spatial jump = each char gets different brightness band
+            const spatialOffset = charIndex * 3.5;
+            // Quantize to 1/16th increments = blocky, discrete steps
+            const quantized = quantizePhase(p + spatialOffset / 100, 16);
+            const paletteIndex = Math.floor((quantized % 1) * paletteSize);
+            return WHITE_SHADES[paletteIndex];
+        }
+
+        function renderFrame() {
+            if (!pillTextEl || !document.body.contains(pillTextEl)) return;
+
+            let html = "";
+            for (let i = 0; i < CHARS.length; i++) {
+                const color = whiteShadeForPhase(phase, i);
+                const ch = CHARS[i] === " " ? "&nbsp;" : CHARS[i];
+                html += `<span style="color:${color};display:inline-block;">${ch}</span>`;
+            }
+            pillTextEl.innerHTML = html;
+            phase += PHASE_STEP;
+        }
+
+        function startRainbow() {
+            if (intervalId) return;
+            pillTextEl = document.querySelector("#openAleBtn .pill-tip-text");
+            if (!pillTextEl) return;
+
+            pillTextEl.style.fontFamily = '"Press Start 2P", "VT323", "DM Mono", ui-monospace, monospace';
+            pillTextEl.style.fontSize = "11px";
+            pillTextEl.style.fontWeight = "500";
+            pillTextEl.style.letterSpacing = ".16em";
+            pillTextEl.style.textTransform = "uppercase";
+            pillTextEl.style.lineHeight = "1.2";
+
+            renderFrame();
+            intervalId = setInterval(renderFrame, FRAME_INTERVAL);
+        }
+
+        function stopRainbow() {
+            if (intervalId) clearInterval(intervalId);
+            intervalId = null;
+            phase = 0;
+        }
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", startRainbow);
+        } else {
+            startRainbow();
+        }
+
+        window.AleRainbow = { start: startRainbow, stop: stopRainbow };
+    })();
+
 })();

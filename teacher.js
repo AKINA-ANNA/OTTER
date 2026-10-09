@@ -2105,15 +2105,23 @@ async function initialiseTeacher() {
         name: displayName,
         email: user.email,
         signOutHref: "teacher-login.html",
-        toast: showToast
+        toast: showToast,
+        onTutorialNavigate: step => { if (step && step.go) setTeacherTab(step.go); }
     });
     initLabTimings();
     setTeacherTab("overview");
     if (window.OtterTutorial) {
-        OtterTutorial.autostart("teacher", {
-            theme: "light",
-            onNavigate: step => { if (step.go) setTeacherTab(step.go); }
-        });
+        if (!window.OtterTutorial.hasSeen("teacher")) {
+            (window.OtterTutorial.showTutorialPrompt || window.showTutorialPrompt)("teacher", {
+                theme: "light",
+                onNavigate: step => { if (step.go) setTeacherTab(step.go); }
+            });
+        } else if (window.OtterTutorial.autostart) {
+            OtterTutorial.autostart("teacher", {
+                theme: "light",
+                onNavigate: step => { if (step.go) setTeacherTab(step.go); }
+            });
+        }
     }
     await syncOverdueState();
     /* Prime the three arrival badges up front. Without this they stay empty

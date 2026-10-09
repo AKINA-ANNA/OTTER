@@ -197,6 +197,109 @@
     box-shadow: 0 8px 24px rgba(200, 243, 109, 0.4);
 }
 
+/* Tutorial Prompt Popup (Start Tutorial or Skip) */
+.otter-tutorial-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: otFade .22s ease;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.otter-tutorial-prompt[data-theme="dark"] { --ot-ink: #f4f5ef; --ot-muted: #9aa39a; --ot-panel: #161a17; --ot-panel-2: #1e2420; --ot-line: rgba(244, 245, 239, .14); --ot-accent: #c8f36d; --ot-accent-ink: #16200e; }
+.otter-tutorial-prompt[data-theme="light"] { --ot-ink: #1d241f; --ot-muted: #6c736a; --ot-panel: #fdfdfa; --ot-panel-2: #f2f2ec; --ot-line: rgba(29, 36, 31, .16); --ot-accent: #2f6f57; --ot-accent-ink: #ffffff; }
+
+.otter-tutorial-prompt::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 12, 10, .6);
+    backdrop-filter: blur(4px);
+}
+
+.otter-tutorial-prompt-modal {
+    position: relative;
+    max-width: 420px;
+    width: calc(100% - 40px);
+    padding: 28px 24px;
+    border-radius: 20px;
+    background: var(--ot-panel);
+    border: 1px solid var(--ot-line);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    color: var(--ot-ink);
+    animation: bubblePop 0.3s cubic-bezier(.2, .9, .3, 1);
+    text-align: center;
+}
+
+.otter-tutorial-prompt-otter {
+    font-size: 48px;
+    line-height: 1;
+    margin-bottom: 12px;
+}
+
+.otter-tutorial-prompt-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--ot-accent);
+}
+
+.otter-tutorial-prompt-body {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ot-ink);
+    margin-bottom: 16px;
+}
+
+.otter-tutorial-prompt-tip {
+    font-size: 12px;
+    color: var(--ot-muted);
+    margin-bottom: 20px;
+    font-style: italic;
+}
+
+.otter-tutorial-prompt-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.otter-tutorial-prompt-btn {
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .1s ease, box-shadow .1s ease, background .15s ease;
+    border: 1px solid var(--ot-line);
+    background: var(--ot-panel-2);
+    color: var(--ot-ink);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.otter-tutorial-prompt-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+
+.otter-tutorial-prompt-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.otter-tutorial-prompt-btn-primary {
+    background: var(--ot-accent);
+    color: var(--ot-accent-ink);
+    border-color: transparent;
+}
+
+.otter-tutorial-prompt-btn-primary:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 10px 28px rgba(200, 243, 109, 0.4);
+}
+
 /* Otter say text (small hint under canvas) */
 .otter-say {
     font-size: 11px;

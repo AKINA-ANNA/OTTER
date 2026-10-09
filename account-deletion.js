@@ -25,6 +25,7 @@
     const CLOSE_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     const TRASH_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>';
     const SIGN_OUT_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
+    const TUTORIAL_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>';
 
     let session = null;
     let parts = null;
@@ -375,6 +376,7 @@
     function actionsMarkup(options) {
         return `
 <div class="ota-actions" data-ota-variant="${options.variant === "sidebar" ? "sidebar" : "popover"}">
+    <button class="ota-action" type="button" data-ota-tutorial>${TUTORIAL_ICON}<span>Start Tutorial</span></button>
     <button class="ota-action" type="button" data-ota-signout>${SIGN_OUT_ICON}<span>Sign out</span></button>
     <button class="ota-action ota-action-danger" type="button" data-ota-delete>${TRASH_ICON}<span>Delete account</span></button>
 </div>`;
@@ -382,12 +384,40 @@
 
     function wireActions(container, options) {
         container.addEventListener("click", async event => {
-            const trigger = event.target.closest("[data-ota-signout], [data-ota-delete]");
+            const trigger = event.target.closest("[data-ota-signout], [data-ota-delete], [data-ota-tutorial]");
             if (!trigger || !options.client) return;
 
             if (trigger.hasAttribute("data-ota-signout")) {
                 trigger.disabled = true;
                 await signOutNow(options);
+                return;
+            }
+
+            if (trigger.hasAttribute("data-ota-tutorial")) {
+                trigger.disabled = true;
+                try {
+                    const variant = options.variant === "sidebar" ? "teacher" : "student";
+                    if (window.OtterTutorial) {
+                        window.OtterTutorial.markSeen(variant);
+                        if (window.OtterTutorial.open) {
+                            window.OtterTutorial.open(variant, {
+                                theme: variant === "teacher" ? "light" : (window.currentTheme ? window.currentTheme() : "dark"),
+                                onNavigate: typeof options.onTutorialNavigate === "function" ? options.onTutorialNavigate : (step => {
+                                    if (step && step.go) {
+                                        if (typeof window.setActiveTab === "function") window.setActiveTab(step.go);
+                                        if (typeof window.setTeacherTab === "function") window.setTeacherTab(step.go);
+                                    }
+                                })
+                            });
+                        }
+                    }
+                } finally {
+                    trigger.disabled = false;
+                    const popover = container.closest("[data-ota-popover]");
+                    if (popover) popover.hidden = true;
+                    const triggerEl = document.querySelector('[aria-haspopup="dialog"][aria-expanded="true"]');
+                    if (triggerEl) triggerEl.setAttribute("aria-expanded", "false");
+                }
                 return;
             }
 

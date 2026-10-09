@@ -6,7 +6,10 @@
     <link rel="icon" type="image/png" href="favicon-admin.png?v=3">
     <link rel="shortcut icon" href="favicon-admin.ico?v=3">
     <title>Otter — Admin console</title>
-    <link rel="stylesheet" href="admin.css?v=41">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="admin.css?v=50">
     <link rel="stylesheet" href="loading-screen.css?v=3">
     <link rel="stylesheet" href="tutorial.css?v=5">
     <link rel="stylesheet" href="account-deletion.css?v=1">
@@ -46,11 +49,15 @@
                     <svg data-lucide="clock" aria-hidden="true"></svg>
                     <span class="pill-tip"><span class="pill-tip-text">Test clock</span></span>
                 </button>
+                <button id="openAleBtn" type="button" aria-label="Ask ALE" class="ale-pill">
+                    <svg data-lucide="sparkles" aria-hidden="true"></svg>
+                    <span class="pill-tip"><span class="pill-tip-text">Ask ALE</span></span>
+                </button>
             </nav>
         </aside>
 
         <main class="admin-main">
-            <header class="admin-topbar"><span>otter / restricted workspace</span><span class="admin-topbar-right"><span id="adminDate">Today</span><button class="ale-topbar" id="openAleBtn" type="button"><span class="ale-spark">✦</span>Ask ALE</button></span></header>
+            <header class="admin-topbar"><span>otter / restricted workspace</span><span class="admin-topbar-right"><span id="adminDate">Today</span></span></header>
             <div class="admin-heading">
                 <div><p class="eyebrow">Operations</p><h1 id="adminTitle">Command center</h1><p id="adminDescription">Live telemetry, restock control and the inventory audit trail in one grid.</p></div>
                 <span class="admin-badge">ADMIN ACCESS</span>
@@ -290,6 +297,6 @@
 <script src="tutorial.js?v=10"></script>
     <script src="account-deletion.js?v=6"></script>
     <script src="ale-api.js?v=1"></script>
-    <script src="admin.js?v=40"></script>
+    <script src="admin.js?v=48"></script>
 </body>
 </html>

@@ -384,6 +384,67 @@
         return true;
     }
 
+    function showTutorialPrompt(key, options) {
+        console.log(`[OtterTutorial] showTutorialPrompt called for "${key}"`);
+        if (hasSeen(key) || session || pending[key]) return false;
+
+        const opts = options || {};
+        const theme = opts.theme === "light" ? "light" : "dark";
+
+        const prompt = build(`
+            <div class="otter-tutorial-prompt" data-theme="${theme}">
+                <div class="otter-tutorial-prompt-modal">
+                    <div class="otter-tutorial-prompt-otter">👋</div>
+                    <div class="otter-tutorial-prompt-title">Welcome to Otter!</div>
+                    <div class="otter-tutorial-prompt-body">Would you like a quick tour to learn how things work?</div>
+                    <div class="otter-tutorial-prompt-tip">You can always start it later from the profile menu</div>
+                    <div class="otter-tutorial-prompt-actions">
+                        <button class="otter-tutorial-prompt-btn" data-ot-skip>Skip</button>
+                        <button class="otter-tutorial-prompt-btn otter-tutorial-prompt-btn-primary" data-ot-start>Start Tutorial</button>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        document.body.appendChild(prompt);
+
+        prompt.addEventListener("click", (e) => {
+            if (e.target.closest("[data-ot-skip]")) {
+                markSeen(key);
+                prompt.remove();
+                if (typeof opts.onSkip === "function") opts.onSkip();
+            }
+            if (e.target.closest("[data-ot-start]")) {
+                prompt.remove();
+                open(key, opts);
+            }
+        });
+
+        // Also allow Enter to start, Escape to skip
+        function onKey(e) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                markSeen(key);
+                prompt.remove();
+                document.removeEventListener("keydown", onKey);
+                if (typeof opts.onSkip === "function") opts.onSkip();
+            }
+            if (e.key === "Enter") {
+                e.preventDefault();
+                prompt.remove();
+                document.removeEventListener("keydown", onKey);
+                open(key, opts);
+            }
+        }
+        document.addEventListener("keydown", onKey);
+
+        return true;
+    }
+
+    if (typeof window.showTutorialPrompt !== "function") {
+        window.showTutorialPrompt = showTutorialPrompt;
+    }
+
     window.OtterTutorial = {
         open,
         close,
@@ -391,6 +452,7 @@
         next,
         previous,
         autostart,
+        showTutorialPrompt,
         hasSeen,
         markSeen,
         isActive: () => !!session

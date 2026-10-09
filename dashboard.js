@@ -2005,15 +2005,23 @@ async function initialiseDashboard() {
         client: supabaseClient,
         variant: "popover",
         signOutHref: "index.html",
-        toast: showToast
+        toast: showToast,
+        onTutorialNavigate: step => { if (step && step.go) setActiveTab(step.go); }
     });
     initLabTimings();
     setActiveTab("overview");
     if (window.OtterTutorial) {
-        OtterTutorial.autostart("student", {
-            theme: currentTheme(),
-            onNavigate: step => { if (step.go) setActiveTab(step.go); }
-        });
+        if (!window.OtterTutorial.hasSeen("student")) {
+            (window.OtterTutorial.showTutorialPrompt || window.showTutorialPrompt)("student", {
+                theme: currentTheme(),
+                onNavigate: step => { if (step.go) setActiveTab(step.go); }
+            });
+        } else if (window.OtterTutorial.autostart) {
+            OtterTutorial.autostart("student", {
+                theme: currentTheme(),
+                onNavigate: step => { if (step.go) setActiveTab(step.go); }
+            });
+        }
     }
     await Promise.all([loadOverviewMetrics(), loadDeadlines(), loadStudentProjects(), loadAnnouncements()]);
 
