@@ -6,12 +6,13 @@
     <link rel="icon" type="image/png" href="favicon-admin.png?v=3">
     <link rel="shortcut icon" href="favicon-admin.ico?v=3">
     <title>Otter — Admin signup</title>
-    <link rel="stylesheet" href="admin.css">
+    <link rel="stylesheet" href="admin.css?v=52">
+    <link rel="stylesheet" href="loading-screen.css?v=3">
 </head>
 <body>
     <main class="auth-wrap">
         <section class="auth-panel">
-            <a class="admin-brand" href="index.html"><span class="admin-mark">O</span><span><strong>otter admin</strong><small>restricted workspace</small></span></a>
+            <a class="admin-brand" href="index.html"><span class="admin-mark">O</span></a>
             <h1>Activate admin access</h1>
             <p>Use the same email and password as your student account, plus the private committee invite code.</p>
             <form id="adminSignupForm">
@@ -25,8 +26,21 @@
             <div class="auth-switch">Already have access? <a href="admin-login.html">Admin login</a></div>
         </section>
     </main>
+
+    <!-- Email confirmation modal -->
+    <div class="modal-backdrop" id="emailConfirmModal" hidden aria-hidden="true">
+        <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="emailConfirmTitle">
+            <div class="modal-icon" aria-hidden="true">✉</div>
+            <h2 id="emailConfirmTitle">Check your inbox</h2>
+            <p>We've sent a confirmation email to <strong id="confirmEmail"></strong>.</p>
+            <p class="modal-sub">Open it and click the confirmation link. Once confirmed, you can sign in.</p>
+            <button class="modal-close-btn" id="emailConfirmClose" type="button">Got it</button>
+        </section>
+    </div>
+
+    <script src="loading-screen.js?v=4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="favicon.js?v=2"></script>
-    <script src="admin-auth.js?v=7"></script>
+    <script src="admin-auth.js?v=14"></script>
 </body>
 </html>

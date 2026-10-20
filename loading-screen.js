@@ -35,7 +35,8 @@
         return threePromise;
     }
 
-    function show() {
+    function show(options = {}) {
+        const fast = options.fast === true;
         if (activeScreen?.isConnected && !activeScreen.classList.contains("is-leaving")) return;
         activeScreen?.remove();
         const sequence = ++screenSequence;
@@ -48,7 +49,7 @@
         screen.innerHTML = `
             <div class="otter-loader-card">
                 <div class="otter-loader-scene" aria-hidden="true">
-                    <div class="otter-loader-model otter-3d" id="otter3d"></div>
+                    ${!fast ? `<div class="otter-loader-model otter-3d" id="otter3d"></div>` : `<div class="otter-loader-spinner"></div>`}
                     <span class="otter-loader-spark">✦</span>
                 </div>
                 <p class="otter-loader-label">OTTER LAB · SYSTEM BOOT</p>
@@ -64,8 +65,8 @@
         const captionTimer = setInterval(() => {
             captionIndex = (captionIndex + 1) % captions.length;
             caption.textContent = captions[captionIndex];
-        }, 2600);
-        const fallbackTimer = setTimeout(dismiss, 20000);
+        }, 2000);
+        const fallbackTimer = setTimeout(dismiss, 3000);
 
         function dismiss() {
             if (finished) return;
@@ -78,25 +79,28 @@
             setTimeout(() => {
                 screen.remove();
                 if (activeScreen === screen) activeScreen = null;
-            }, 450);
+            }, 200);
             if (activeDismiss === dismiss) activeDismiss = null;
         }
 
         activeScreen = screen;
         activeDismiss = dismiss;
-        otterMountQueue = otterMountQueue
-            .catch(() => {})
-            .then(() => ensureThree())
-            .then(() => loadScript(`otter3d.js?v=5&loader=${sequence}`))
-            .then(() => {
-                if (!window.Otter3D) return;
-                if (finished || !screen.isConnected || sequence !== screenSequence) {
-                    window.Otter3D.stop?.();
-                    return;
-                }
-                window.Otter3D.celebrate();
-            })
-            .catch(() => {});
+
+        if (!fast) {
+            otterMountQueue = otterMountQueue
+                .catch(() => {})
+                .then(() => ensureThree())
+                .then(() => loadScript(`otter3d.js?v=5&loader=${sequence}`))
+                .then(() => {
+                    if (!window.Otter3D) return;
+                    if (finished || !screen.isConnected || sequence !== screenSequence) {
+                        window.Otter3D.stop?.();
+                        return;
+                    }
+                    window.Otter3D.celebrate();
+                })
+                .catch(() => {});
+        }
     }
 
     window.OtterLoading = {

@@ -9,6 +9,74 @@ const report = (el, text, ok) => {
     el.classList.toggle("ok", Boolean(ok));
 };
 
+// Show email confirmation modal
+function showEmailConfirmModal(email) {
+    const modal = document.getElementById("emailConfirmModal");
+    const emailEl = document.getElementById("confirmEmail");
+    const closeBtn = document.getElementById("emailConfirmClose");
+    if (modal && emailEl) {
+        emailEl.textContent = email;
+        modal.hidden = false;
+        modal.removeAttribute("aria-hidden");
+        modal.classList.remove("closing");
+        if (closeBtn) {
+            closeBtn.focus();
+            closeBtn.onclick = () => closeModal(modal);
+        }
+        // Close on backdrop click
+        modal.onclick = (e) => {
+            if (e.target === modal) closeModal(modal);
+        };
+        // Close on Escape
+        const escHandler = (e) => {
+            if (e.key === "Escape") {
+                closeModal(modal);
+                document.removeEventListener("keydown", escHandler);
+            }
+        };
+        document.addEventListener("keydown", escHandler);
+    }
+}
+
+function closeModal(modal) {
+    if (!modal || modal.classList.contains("closing")) return;
+    modal.classList.add("closing");
+    setTimeout(() => {
+        modal.hidden = true;
+        modal.setAttribute("aria-hidden", "true");
+        modal.classList.remove("closing");
+    }, 200); // matches CSS animation duration
+}
+    
+// Helper to set loading state on a form submit button
+function setButtonLoading(form, isLoading) {
+    const button = form.querySelector("button[type=submit]");
+    if (!button) return;
+    if (isLoading) {
+        button.disabled = true;
+        button.dataset.originalText = button.textContent;
+        button.textContent = "Loading…";
+    } else {
+        button.disabled = false;
+        button.textContent = button.dataset.originalText || button.textContent;
+    }
+}
+
+// Robust loading wrapper - ensures hide is always called
+async function withLoading(form, fn) {
+    setButtonLoading(form, true);
+    window.OtterLoading?.show({ fast: true });
+    try {
+        return await fn();
+    } finally {
+        // Small delay to prevent flash, then hide
+        setTimeout(() => {
+            window.OtterLoading?.hide();
+            setButtonLoading(form, false);
+        }, 150);
+    }
+}
+
 async function verifyAdmin() {
     const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) return false;
@@ -33,10 +101,6 @@ async function verifyAdmin() {
     return true;
 }
 
-/* The invite code is captured at sign-up into user metadata. With email
-   confirmation on, signUp() returns no session so claim_admin_invite() cannot
-   run until the address is verified; the stored code is what lets activation
-   finish at first sign-in instead of leaving the admin locked out. */
 const storedInviteCode = user => String(user?.user_metadata?.admin_invite_code || "").trim();
 
 async function claimInvite(inviteCode) {
@@ -52,27 +116,22 @@ if (loginForm) {
     loginForm.addEventListener("submit", async event => {
         event.preventDefault();
         message("");
-        window.OtterLoading?.show();
-        try {
+
+        await withLoading(loginForm, async () => {
             const { error } = await supabaseClient.auth.signInWithPassword({
                 email: document.getElementById("adminEmail").value.trim(),
                 password: document.getElementById("adminPassword").value
             });
             if (error) {
                 if (/not confirmed/i.test(error.message)) {
-                    message("Confirm that email first, then sign in. Check your inbox for the confirmation link.");
+                    showEmailConfirmModal(document.getElementById("adminEmail").value.trim());
                 } else {
                     message("That admin email or password is not valid.");
                 }
-                window.OtterLoading?.hide();
                 return;
             }
             const { data: isAdmin, error: roleError } = await supabaseClient.rpc("is_admin");
             if (roleError || !isAdmin) {
-                /* Not an admin yet. If sign-up happened while email confirmation
-                   was on, the invite was never claimed - finish it now that the
-                   address is verified and a session exists. The invite field only
-                   exists on the sign-up page, so the code comes from metadata. */
                 const { data: userData } = await supabaseClient.auth.getUser();
                 const activated = roleError ? false : await claimInvite(storedInviteCode(userData?.user));
                 if (!activated) {
@@ -80,17 +139,12 @@ if (loginForm) {
                     message(roleError
                         ? "Could not check admin access right now. Try again."
                         : "This account does not have admin access.");
-                    window.OtterLoading?.hide();
                     return;
                 }
             }
             window.OtterFavicon?.apply("admin");
             window.location.href = "admin.html";
-        } catch (error) {
-            console.error("Admin sign-in failed:", error);
-            message("Could not sign in right now. Check your connection and try again.");
-            window.OtterLoading?.hide();
-        }
+        });
     });
 }
 
@@ -127,34 +181,31 @@ if (adminResetForm && adminShowReset && adminHideReset) {
         if (!invite) { report(resetError, "Enter your invite code.", false); return; }
         if (password.length < 6) { report(resetError, "The new password must be at least 6 characters.", false); return; }
         if (password !== password2) { report(resetError, "The two passwords do not match.", false); return; }
-        const button = adminResetForm.querySelector("button[type=submit]");
-        const original = button.textContent;
-        button.disabled = true;
-        button.textContent = "Resetting…";
-        const { data, error } = await supabaseClient.rpc("reset_password_via_invite", {
-            p_role: "admin",
-            p_email: email,
-            p_invite_code: invite,
-            p_new_password: password
+
+        await withLoading(adminResetForm, async () => {
+            const { data, error } = await supabaseClient.rpc("reset_password_via_invite", {
+                p_role: "admin",
+                p_email: email,
+                p_invite_code: invite,
+                p_new_password: password
+            });
+            if (error) {
+                const text = error.message.toLowerCase();
+                if (text.includes("too_many_tries")) { report(resetError, "Too many attempts from this email. Wait 10 minutes and try again.", false); return; }
+                if (text.includes("invalid_invite")) { report(resetError, "That invite code was not accepted.", false); return; }
+                if (text.includes("no_account")) { report(resetError, "No admin account exists for that email.", false); return; }
+                if (data === false) { report(resetError, "Could not reset that password.", false); return; }
+                report(resetError, error.message, false);
+                return;
+            }
+            adminResetForm.hidden = true;
+            adminShowReset.closest(".auth-switch").hidden = false;
+            loginForm.hidden = false;
+            document.getElementById("adminEmail").value = email;
+            document.getElementById("adminPassword").value = "";
+            report(errorElement, "Password reset. Sign in with your new password.", true);
+            document.getElementById("adminPassword").focus();
         });
-        button.disabled = false;
-        button.textContent = original;
-        if (error) {
-            const text = error.message.toLowerCase();
-            if (text.includes("too_many_tries")) { report(resetError, "Too many attempts from this email. Wait 10 minutes and try again.", false); return; }
-            if (text.includes("invalid_invite")) { report(resetError, "That invite code was not accepted.", false); return; }
-            if (text.includes("no_account")) { report(resetError, "No admin account exists for that email.", false); return; }
-            if (data === false) { report(resetError, "Could not reset that password.", false); return; }
-            report(resetError, error.message, false);
-            return;
-        }
-        adminResetForm.hidden = true;
-        adminShowReset.closest(".auth-switch").hidden = false;
-        loginForm.hidden = false;
-        document.getElementById("adminEmail").value = email;
-        document.getElementById("adminPassword").value = "";
-        report(errorElement, "Password reset. Sign in with your new password.", true);
-        document.getElementById("adminPassword").focus();
     });
 }
 
@@ -163,58 +214,61 @@ if (signupForm) {
     signupForm.addEventListener("submit", async event => {
         event.preventDefault();
         message("");
-        const password = document.getElementById("adminPassword").value;
-        if (!password) { message("Enter the password for your student account."); return; }
-        const { data, error } = await supabaseClient.auth.signUp({
-            email: document.getElementById("adminEmail").value.trim(),
-            password,
-            options: {
-                emailRedirectTo: `${window.location.origin}/admin-login.html`,
-                data: {
-                    full_name: document.getElementById("adminName").value.trim(),
-                    admin_invite_code: document.getElementById("adminInvite").value
-                }
-            }
-        });
-        const existingAccount = error && (error.message.toLowerCase().includes("already registered") || error.message.toLowerCase().includes("already been registered"));
-        const existingEmailResponse = data?.user && data.user.identities?.length === 0;
-        if (existingAccount || existingEmailResponse) {
-            const { error: loginError } = await supabaseClient.auth.signInWithPassword({
+
+        await withLoading(signupForm, async () => {
+            const password = document.getElementById("adminPassword").value;
+            if (!password) { message("Enter the password for your student account."); return; }
+            const { data, error } = await supabaseClient.auth.signUp({
                 email: document.getElementById("adminEmail").value.trim(),
-                password
+                password,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/admin-login.html`,
+                    data: {
+                        full_name: document.getElementById("adminName").value.trim(),
+                        admin_invite_code: document.getElementById("adminInvite").value
+                    }
+                }
             });
-            if (loginError) {
-                if (/not confirmed/i.test(loginError.message)) {
-                    message("That account exists but its email is not confirmed yet. Confirm it, then sign in on Admin login.");
+            const existingAccount = error && (error.message.toLowerCase().includes("already registered") || error.message.toLowerCase().includes("already been registered"));
+            const existingEmailResponse = data?.user && data.user.identities?.length === 0;
+            if (existingAccount || existingEmailResponse) {
+                const { error: loginError } = await supabaseClient.auth.signInWithPassword({
+                    email: document.getElementById("adminEmail").value.trim(),
+                    password
+                });
+                if (loginError) {
+                    if (/not confirmed/i.test(loginError.message)) {
+                        showEmailConfirmModal(document.getElementById("adminEmail").value.trim());
+                    } else {
+                        message("That password does not match the student account.");
+                    }
+                    return;
+                }
+                const claimed = await verifyAdmin();
+                if (!claimed) { message("The invite code was not accepted."); return; }
+                window.OtterFavicon?.apply("admin");
+                window.location.href = "admin.html";
+                return;
+            }
+            if (error) {
+                const errorText = error.message.toLowerCase();
+                if (errorText.includes("rate limit") || errorText.includes("too many")) {
+                    message("Supabase email rate limit reached. Wait a few minutes before trying again.");
+                } else if (errorText.includes("already registered") || errorText.includes("already been registered")) {
+                    message("This email already has an account. Confirm it if needed, then use Admin login.");
                 } else {
-                    message("That password does not match the student account.");
+                    message(error.message);
                 }
                 return;
             }
-            const claimed = await verifyAdmin();
-            if (!claimed) { message("The invite code was not accepted."); return; }
-            window.OtterFavicon?.apply("admin");
-            window.location.href = "admin.html";
-            return;
-        }
-        if (error) {
-            const errorText = error.message.toLowerCase();
-            if (errorText.includes("rate limit") || errorText.includes("too many")) {
-                message("Supabase email rate limit reached. Wait a few minutes before trying again.");
-            } else if (errorText.includes("already registered") || errorText.includes("already been registered")) {
-                message("This email already has an account. Confirm it if needed, then use Admin login.");
-            } else {
-                message(error.message);
+            if (data.session) {
+                const claimed = await verifyAdmin();
+                if (!claimed) { message("The invite code was not accepted."); return; }
+                window.OtterFavicon?.apply("admin");
+                window.location.href = "admin.html";
+                return;
             }
-            return;
-        }
-        if (data.session) {
-            const claimed = await verifyAdmin();
-            if (!claimed) { message("The invite code was not accepted."); return; }
-            window.OtterFavicon?.apply("admin");
-            window.location.href = "admin.html";
-            return;
-        }
-        message("Almost there — open the confirmation link we just emailed you, then sign in on Admin login. Your invite code is applied automatically at that first sign-in.");
+            showEmailConfirmModal(document.getElementById("adminEmail").value.trim());
+        });
     });
 }

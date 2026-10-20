@@ -24,6 +24,8 @@ let logsRangeMode = "default";
 let teacherNotices = [];
 let teacherNoticeHistory = [];
 let simClock = { simulated_at: null, label: null };
+let noticeFirstLoad = true;
+let seenNoticeIds = new Set();
 function effectiveTeacherNow() { return simClock.simulated_at ? new Date(simClock.simulated_at) : new Date(); }
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -1103,7 +1105,7 @@ function renderDiaryEntry(row) {
 
 /* ---------------- Overdue notices (Notice tab) ---------------- */
 
-async function loadNoticeData() {
+async function loadNoticeData(trigger = "initial") {
     await syncOverdueState();
     const { data: notices, error } = await supabaseClient
         .from("notices")
@@ -1117,7 +1119,15 @@ async function loadNoticeData() {
         return;
     }
     const all = (notices || []).slice();
-    const loanIds = [...new Set(all.map(notice => notice.loan_id).filter(Boolean))];
+
+    // Filter active notices to only show those created after account creation
+    // But keep ALL notices in history (including historical ones)
+    const accountCreatedAt = currentUser?.created_at ? new Date(currentUser.created_at) : null;
+    const activeAll = accountCreatedAt
+        ? all.filter(n => new Date(n.created_at) >= accountCreatedAt)
+        : all;
+
+    const loanIds = [...new Set(activeAll.map(notice => notice.loan_id).filter(Boolean))];
     let loans = [];
     if (loanIds.length) {
         const { data, error: loanError } = await supabaseClient
@@ -1128,7 +1138,7 @@ async function loadNoticeData() {
     }
     const loanMap = Object.fromEntries((loans || []).map(loan => [loan.id, loan]));
     const now = effectiveTeacherNow();
-    all.forEach(notice => {
+    activeAll.forEach(notice => {
         notice.loan = notice.loan_id ? loanMap[notice.loan_id] || null : null;
         notice.overdue_days = notice.loan?.due_at ? Math.max(0, Math.floor((now - new Date(notice.loan.due_at)) / 86400000)) : null;
         notice.days_late = notice.loan?.due_at && notice.loan.returned_at ? Math.max(0, Math.round((new Date(notice.loan.returned_at) - new Date(notice.loan.due_at)) / 86400000)) : null;
@@ -1139,13 +1149,28 @@ async function loadNoticeData() {
         if (b.overdue_days != null) return 1;
         return new Date(b.created_at) - new Date(a.created_at);
     };
-    all.sort(byUrgency);
-    teacherNoticeHistory = all;
-    teacherNotices = all.filter(notice => !(Array.isArray(notice.dismissed_by) ? notice.dismissed_by : []).includes(currentUser.id));
+    activeAll.sort(byUrgency);
+    // History keeps ALL notices (including historical)
+    const allSorted = all.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    teacherNoticeHistory = allSorted;
+    // Active notices only show post-account-creation ones
+    teacherNotices = activeAll.filter(notice => !(Array.isArray(notice.dismissed_by) ? notice.dismissed_by : []).includes(currentUser.id));
     renderTeacherNotices();
     renderNoticeHistory();
     document.getElementById("noticeHistoryCount").textContent = teacherNoticeHistory.length;
-    if (teacherNotices.length) playNotificationSound();
+
+    // Only play sound for NEW notices after first load, NOT on dismiss
+    if (trigger !== "dismiss" && !noticeFirstLoad) {
+        const newNotices = activeAll.filter(n => !seenNoticeIds.has(n.id));
+        if (newNotices.length > 0) {
+            primeAudio();
+            playNotificationSound();
+        }
+    } else if (noticeFirstLoad) {
+        noticeFirstLoad = false;
+    }
+    // Update seen notice IDs
+    activeAll.forEach(n => seenNoticeIds.add(n.id));
 }
 
 async function renderTeacherNotices(listToRender) {
@@ -1179,7 +1204,7 @@ async function renderTeacherNotices(listToRender) {
 async function dismissTeacherNotice(noticeId) {
     const { error } = await supabaseClient.rpc("dismiss_notice", { p_notice_id: noticeId });
     if (error) { showToast("Could not dismiss that notice"); return; }
-    await loadNoticeData();
+    await loadNoticeData("dismiss");
 }
 
 function noticeHistoryRow(record) {
@@ -2157,7 +2182,7 @@ async function initialiseTeacher() {
         .subscribe();
 
     supabaseClient.channel("teacher-notice-feed")
-        .on("postgres_changes", { event: "*", schema: "public", table: "notices" }, loadNoticeData)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "notices" }, loadNoticeData)
         .on("postgres_changes", { event: "*", schema: "public", table: "sim_clock" }, async () => {
             await refreshTeacherSimClock();
             /* Disabling the test clock hands the real date back, which can push

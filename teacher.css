@@ -295,6 +295,7 @@ a { color: inherit; text-decoration: none; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: rgba(26, 33, 28, .55); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
 .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+.modal-backdrop:not(.open) { display: none; }
 .modal-panel { width: min(560px, 100%); max-height: min(620px, 92vh); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 30px 80px rgba(28, 42, 30, .3); transform: translateY(8px); transition: transform .22s ease; }
 .modal-backdrop.open .modal-panel { transform: translateY(0); }
 .modal-panel.wide { width: min(760px, 100%); }
@@ -308,6 +309,49 @@ a { color: inherit; text-decoration: none; }
 .modal-step.active { display: grid; gap: 14px; }
 .modal-step-actions { display: flex; flex: 0 0 auto; gap: 8px; }
 .hidden { display: none !important; }
+
+/* ============ Email Confirmation Modal (unique classes for login/signup only) ============ */
+@keyframes ecModalBackdropIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes ecModalBackdropOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+@keyframes ecModalPanelIn {
+    from { opacity: 0; transform: scale(0.85) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes ecModalPanelOut {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to { opacity: 0; transform: scale(0.9) translateY(-10px); }
+}
+@keyframes ecIconPop {
+    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+    50% { transform: scale(1.15) rotate(-10deg); }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes ecTextReveal {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.email-confirm-modal-backdrop[hidden] { display: none; }
+.email-confirm-modal-backdrop:not([hidden]) { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(26, 33, 28, .55); backdrop-filter: blur(3px); animation: ecModalBackdropIn .2s ease both; z-index: 1000; }
+.email-confirm-modal-backdrop.closing { animation: ecModalBackdropOut .15s ease forwards; }
+
+.email-confirm-modal-panel { width: min(420px, 90%); padding: 32px 28px; text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 40px 100px rgba(0, 0, 0, .55); animation: ecModalPanelIn .35s cubic-bezier(.22, 1.4, .36, 1) both; }
+.email-confirm-modal-backdrop.closing .email-confirm-modal-panel { animation: ecModalPanelOut .2s ease forwards; }
+
+.email-confirm-modal-icon { display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%; background: linear-gradient(135deg, var(--lime), #fde047); color: #09090b; font-size: 24px; font-weight: 800; box-shadow: 0 8px 24px rgba(250, 204, 21, .35); animation: ecIconPop .5s cubic-bezier(.22, 1.4, .36, 1) .1s both; }
+.email-confirm-modal-panel h2 { margin: 0 0 10px; font-size: 20px; letter-spacing: -.4px; color: var(--ink); animation: ecTextReveal .3s ease .2s both; }
+.email-confirm-modal-panel p { margin: 0 0 8px; color: var(--muted); font-size: 13px; line-height: 1.55; animation: ecTextReveal .3s ease .25s both; }
+.email-confirm-modal-panel p strong { color: var(--lime); }
+.email-confirm-modal-sub { font-size: 12px !important; color: var(--muted) !important; margin-top: 14px !important; animation: ecTextReveal .3s ease .3s both; }
+.email-confirm-modal-close-btn { margin-top: 24px; padding: 12px 28px; border: 0; border-radius: 10px; background: var(--lime); color: #09090b; font-weight: 700; font-size: 13px; cursor: pointer; transition: background .15s ease, transform .1s ease; animation: ecTextReveal .3s ease .35s both; }
+.email-confirm-modal-close-btn:hover { background: #fde047; transform: translateY(-1px); }
+.email-confirm-modal-close-btn:active { transform: translateY(0); }
 .audience-note { display: flex; flex-wrap: wrap; gap: 7px; border: 1px dashed var(--line); border-radius: 10px; padding: 12px; background: var(--panel-soft); }
 .audience-label { padding: 5px 9px; border-radius: 7px; background: var(--mint); color: #fff; font-family: "DM Mono", monospace; font-size: 8px; text-transform: uppercase; }
 .project-audience { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 12px; }
